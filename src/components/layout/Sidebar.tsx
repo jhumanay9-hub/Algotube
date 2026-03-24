@@ -2,9 +2,10 @@
 "use client";
 
 import React from 'react';
-import { Home, TrendingUp, Users, Clock, ThumbsUp, Layers, Settings, HelpCircle } from 'lucide-react';
+import { Home, TrendingUp, Users, Clock, ThumbsUp, Layers, Settings, HelpCircle, LogIn } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useUser } from '@/firebase';
 
 const MENU_ITEMS = [
   { icon: Home, label: 'Home', href: '/' },
@@ -20,6 +21,7 @@ const LIBRARY_ITEMS = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { user } = useUser();
 
   const SidebarItem = ({ icon: Icon, label, href }: { icon: any, label: string, href: string }) => {
     const isActive = pathname === href;
@@ -38,12 +40,17 @@ export default function Sidebar() {
     );
   };
 
+  const dynamicMenuItems = [
+    ...MENU_ITEMS,
+    ...(user ? [] : [{ icon: LogIn, label: 'Sign In', href: '/auth' }])
+  ];
+
   return (
     <aside className="w-64 glass-panel m-4 mt-0 rounded-2xl p-4 flex flex-col gap-8">
       <div>
         <h3 className="text-xs font-headline font-semibold text-muted-foreground uppercase tracking-widest mb-4 px-4">Menu</h3>
         <div className="space-y-1">
-          {MENU_ITEMS.map((item) => (
+          {dynamicMenuItems.map((item) => (
             <SidebarItem key={item.label} {...item} />
           ))}
         </div>

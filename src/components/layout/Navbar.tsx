@@ -63,6 +63,7 @@ export default function Navbar() {
           <Input 
             className="w-full pl-10 bg-white/5 border-white/10 focus:border-accent/50 focus:ring-accent/20 rounded-xl font-body"
             placeholder="Search creators and content..."
+            search-hint="video content"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setShowSuggestions(true)}
@@ -121,11 +122,25 @@ export default function Navbar() {
             </DropdownMenu>
           </>
         ) : (
-          <Link href="/auth">
-            <Button className="bg-accent text-background hover:neon-glow font-bold rounded-xl flex items-center gap-2">
-              <LogIn size={18} /> Sign In
-            </Button>
-          </Link>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="w-10 h-10 rounded-xl border border-white/10 hover:border-accent/40 bg-white/5">
+                <User size={20} className="text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="glass-panel border-white/10 mt-2 min-w-[200px]" align="end">
+              <DropdownMenuLabel className="font-headline">Account</DropdownMenuLabel>
+              <DropdownMenuSeparator className="bg-white/10" />
+              <Link href="/auth">
+                <DropdownMenuItem className="hover:bg-accent/10 cursor-pointer flex items-center gap-2 font-bold text-accent">
+                  <LogIn size={16} /> Sign In
+                </DropdownMenuItem>
+              </Link>
+              <DropdownMenuSeparator className="bg-white/10" />
+              <DropdownMenuItem className="hover:bg-white/5 cursor-pointer">Language: English</DropdownMenuItem>
+              <DropdownMenuItem className="hover:bg-white/5 cursor-pointer">Help & Feedback</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
 
