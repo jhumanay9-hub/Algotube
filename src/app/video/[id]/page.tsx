@@ -9,19 +9,21 @@ import CommunityPanel from '@/components/layout/CommunityPanel';
 import CanvasVideoPlayer from '@/components/video-player/CanvasVideoPlayer';
 import VideoCard from '@/components/video-card/VideoCard';
 import { MOCK_VIDEOS } from '@/app/lib/mock-data';
-import { useFirestore, useUser, useDoc, useMemoFirebase, useCollection } from '@/firebase';
+import { useFirestore, useUser, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, runTransaction, increment, serverTimestamp, setDoc } from 'firebase/firestore';
-import { Share2, ThumbsUp, ThumbsDown, Eye, Sparkles, ShieldCheck, UserPlus, UserCheck } from 'lucide-react';
+import { Share2, ThumbsUp, ThumbsDown, Eye, Sparkles, ShieldCheck, UserPlus, UserCheck, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { personalizeVideoRecommendations, PersonalizedVideoRecommendationsOutput } from '@/ai/flows/personalized-video-recommendations-flow';
 import { toggleSubscription, addToHistory } from '@/firebase/social-logic';
 import { cn } from '@/lib/utils';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function VideoDetailPage() {
   const { id } = useParams();
   const { firestore } = useFirestore();
-  const { user } = useUser();
+  const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
   const videoRef = useMemoFirebase(() => {
@@ -29,7 +31,7 @@ export default function VideoDetailPage() {
     return doc(firestore, 'videos', id as string);
   }, [firestore, id]);
 
-  const { data: video, isLoading } = useDoc(videoRef);
+  const { data: video, isLoading: isVideoLoading } = useDoc(videoRef);
   
   const subRef = useMemoFirebase(() => {
     if (!firestore || !user || !video?.uploaderId) return null;
@@ -70,6 +72,7 @@ export default function VideoDetailPage() {
   }, [id, user, displayVideo]);
 
   const handleInteraction = async (type: 'like' | 'dislike') => {
+    if (isUserLoading) return;
     if (!user || !firestore || !id) {
       toast({ title: "Auth Required", description: "Sign in to interact with content." });
       return;
@@ -83,8 +86,7 @@ export default function VideoDetailPage() {
       await runTransaction(firestore, async (transaction) => {
         const interactionDoc = await transaction.get(interactionRef);
         if (interactionDoc.exists()) {
-          toast({ title: "Already Interacted", description: `You have already ${type}d this content.` });
-          return;
+          return Promise.reject("ALREADY_INTERACTED");
         }
 
         transaction.set(interactionRef, {
@@ -99,13 +101,22 @@ export default function VideoDetailPage() {
         });
       });
       
-      toast({ title: "Success!", description: `Interaction recorded: ${type}` });
-    } catch (e) {
-      console.error(e);
+      toast({ title: "Success!", description: `Transmission ${type}d.` });
+    } catch (e: any) {
+      if (e === "ALREADY_INTERACTED") {
+        toast({ title: "Already Interacted", description: `You have already recorded your stance.` });
+      } else {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: videoRef.path,
+          operation: 'update',
+          requestResourceData: { [type === 'like' ? 'likesCount' : 'dislikesCount']: 'increment' }
+        }));
+      }
     }
   };
 
   const handleSubscribe = async () => {
+    if (isUserLoading) return;
     if (!user || !firestore || !video?.uploaderId) {
       toast({ title: "Action Required", description: "Sign in to subscribe to creators." });
       return;
@@ -117,7 +128,6 @@ export default function VideoDetailPage() {
     toast({
       title: isSubscribed ? "Unsubscribed" : "Subscribed",
       description: isSubscribed ? "Creator removed from your mesh." : "Creator added to your mesh.",
-      variant: isSubscribed ? "default" : "default"
     });
   };
 
@@ -165,6 +175,7 @@ export default function VideoDetailPage() {
                   </div>
                   <Button 
                     onClick={handleSubscribe}
+                    disabled={isUserLoading}
                     className={cn(
                       "ml-4 rounded-xl font-headline font-bold transition-all duration-300",
                       isSubscribed 
@@ -172,7 +183,7 @@ export default function VideoDetailPage() {
                         : "bg-white text-black hover:bg-white/90"
                     )}
                   >
-                    {isSubscribed ? <><UserCheck className="mr-2" size={16} /> SUBSCRIBED</> : <><UserPlus className="mr-2" size={16} /> SUBSCRIBE</>}
+                    {isUserLoading ? <Loader2 className="animate-spin" size={16} /> : isSubscribed ? <><UserCheck className="mr-2" size={16} /> SUBSCRIBED</> : <><UserPlus className="mr-2" size={16} /> SUBSCRIBE</>}
                   </Button>
                 </div>
 
@@ -181,6 +192,7 @@ export default function VideoDetailPage() {
                     <Button 
                       variant="ghost" 
                       onClick={() => handleInteraction('like')}
+                      disabled={isUserLoading}
                       className="rounded-l-lg hover:bg-accent/10 hover:text-accent gap-2 px-4 h-9 group/btn transition-all"
                     >
                       <ThumbsUp size={16} className="group-hover/btn:scale-110" /> {displayVideo.likesCount || 0}
@@ -189,6 +201,7 @@ export default function VideoDetailPage() {
                     <Button 
                       variant="ghost" 
                       onClick={() => handleInteraction('dislike')}
+                      disabled={isUserLoading}
                       className="rounded-r-lg hover:bg-destructive/10 hover:text-destructive h-9 px-4 group/btn transition-all"
                     >
                       <ThumbsDown size={16} className="group-hover/btn:scale-110" />

@@ -41,21 +41,13 @@
           "description": "Timestamp when the user registered on the platform.",
           "format": "date-time"
         },
-        "lastLoginAt": {
-          "type": "string",
-          "description": "Timestamp of the user's last successful login.",
-          "format": "date-time"
+        "subscriberCount": {
+          "type": "number",
+          "description": "Total number of subscribers for this creator."
         },
         "subscribedChannelIds": {
           "type": "array",
           "description": "References to UserProfile IDs of channels this user has subscribed to.",
-          "items": {
-            "type": "string"
-          }
-        },
-        "subscriberIds": {
-          "type": "array",
-          "description": "References to UserProfile IDs of users who have subscribed to this user's channel.",
           "items": {
             "type": "string"
           }
@@ -105,10 +97,6 @@
           "description": "Timestamp when the video was uploaded.",
           "format": "date-time"
         },
-        "durationSeconds": {
-          "type": "number",
-          "description": "The total duration of the video in seconds."
-        },
         "viewsCount": {
           "type": "number",
           "description": "The total number of times the video has been viewed."
@@ -116,17 +104,6 @@
         "uploaderId": {
           "type": "string",
           "description": "Reference to the UserProfile ID of the user who uploaded this video."
-        },
-        "tags": {
-          "type": "array",
-          "description": "A list of keywords or tags associated with the video, used for search and recommendations.",
-          "items": {
-            "type": "string"
-          }
-        },
-        "category": {
-          "type": "string",
-          "description": "The primary category or genre of the video."
         },
         "likesCount": {
           "type": "number",
@@ -140,13 +117,20 @@
           "type": "number",
           "description": "The total number of comments on the video."
         },
+        "shareCount": {
+          "type": "number",
+          "description": "The total number of times this video has been shared."
+        },
         "processingStatus": {
           "type": "string",
           "description": "The current processing status of the video (e.g., 'uploaded', 'processing', 'ready', 'failed')."
         },
-        "safetyFlag": {
-          "type": "boolean",
-          "description": "Indicates if the content has been flagged by AI safety filters."
+        "tags": {
+          "type": "array",
+          "description": "A list of keywords or tags associated with the video.",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
