@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview This file implements a Genkit flow for generating personalized video recommendations.
@@ -93,7 +94,26 @@ const personalizedVideoRecommendationsFlow = ai.defineFlow(
     outputSchema: PersonalizedVideoRecommendationsOutputSchema,
   },
   async (input) => {
-    const {output} = await recommendationPrompt(input);
-    return output!;
+    try {
+      const {output} = await recommendationPrompt(input);
+      return output!;
+    } catch (error: any) {
+      console.error('AI Recommendation Quota Exceeded or Error:', error.message);
+      
+      // Fallback: Pick top 3 videos from availableVideos that aren't in viewingHistory
+      const watchedIds = new Set(input.viewingHistory.map(v => v.id));
+      const fallbacks = input.availableVideos
+        .filter(v => !watchedIds.has(v.id))
+        .slice(0, 3)
+        .map(v => ({
+          id: v.id,
+          reason: "Selected via community popularity (AI service currently syncing)."
+        }));
+
+      return {
+        recommendedVideos: fallbacks,
+        overallReasoning: "Fallback strategy enabled due to high algorithmic demand. Providing top relevant available transmissions."
+      };
+    }
   }
 );

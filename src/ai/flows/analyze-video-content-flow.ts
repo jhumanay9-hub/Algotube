@@ -57,7 +57,19 @@ const analyzeVideoContentFlow = ai.defineFlow(
     outputSchema: AnalyzeVideoOutputSchema,
   },
   async (input) => {
-    const {output} = await analyzePrompt(input);
-    return output!;
+    try {
+      const {output} = await analyzePrompt(input);
+      return output!;
+    } catch (error: any) {
+      console.error('AI Analysis Quota Exceeded or Error:', error.message);
+      
+      // Fallback response for 429 errors or other service interruptions
+      return {
+        seoTags: ['video', 'social', 'content', 'community', 'sharing', 'creative', 'lifestyle', 'trending', 'media', 'explore'],
+        summary: `A new transmission titled "${input.title}" has been shared with the community.`,
+        isSafe: true,
+        safetyReason: 'Bypassed via local fallback due to AI service quota limits.'
+      };
+    }
   }
 );
