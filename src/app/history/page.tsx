@@ -11,7 +11,7 @@ import { Clock, History } from 'lucide-react';
 import { MOCK_VIDEOS } from '@/app/lib/mock-data';
 
 export default function HistoryPage() {
-  const { firestore } = useFirestore();
+  const firestore = useFirestore();
   const { user } = useUser();
   
   const historyQuery = useMemoFirebase(() => {

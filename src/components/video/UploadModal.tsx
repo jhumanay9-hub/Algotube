@@ -17,12 +17,12 @@ import { cn } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
-interface UploadModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+interface CircularProgressProps {
+  progress: number;
+  label?: string;
 }
 
-const CircularProgress = ({ progress, label }: { progress: number, label?: string }) => {
+const CircularProgress = ({ progress, label }: CircularProgressProps) => {
   const radius = 36;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (progress / 100) * circumference;
@@ -69,7 +69,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
   const [showErrors, setShowErrors] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { firestore } = useFirestore();
+  const firestore = useFirestore();
   const storage = useStorage();
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
@@ -115,6 +115,11 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
         description: "Please provide a title, category, and select a media file.",
       });
       return;
+    }
+
+    if (!firestore || !storage) {
+       console.error('Firebase services or user not initialized');
+       return;
     }
 
     setIsUploading(true);

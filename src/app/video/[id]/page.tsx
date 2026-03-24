@@ -9,7 +9,7 @@ import CommunityPanel from '@/components/layout/CommunityPanel';
 import CanvasVideoPlayer from '@/components/video-player/CanvasVideoPlayer';
 import VideoCard from '@/components/video-card/VideoCard';
 import { MOCK_VIDEOS } from '@/app/lib/mock-data';
-import { useFirestore, useUser, useDoc, useMemoFirebase } from '@/firebase';
+import { useFirebase, useUser, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, runTransaction, increment, serverTimestamp, setDoc } from 'firebase/firestore';
 import { Share2, ThumbsUp, ThumbsDown, Eye, Sparkles, ShieldCheck, UserPlus, UserCheck, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function VideoDetailPage() {
   const { id } = useParams();
-  const { firestore, auth } = useFirestore() as any; // Using auth from context
+  const { firestore, auth } = useFirebase();
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 

@@ -19,7 +19,7 @@ interface CommunityPanelProps {
 export default function CommunityPanel({ videoId }: CommunityPanelProps) {
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { firestore } = useFirestore();
+  const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 

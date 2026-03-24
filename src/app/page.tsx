@@ -29,7 +29,7 @@ function shuffle<T>(array: T[]): T[] {
 export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const { user } = useUser();
-  const { firestore } = useFirestore();
+  const firestore = useFirestore();
 
   const videosQuery = useMemoFirebase(() => {
     if (!firestore) return null;
