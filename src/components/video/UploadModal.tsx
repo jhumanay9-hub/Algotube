@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, Loader2, FileVideo, Music, Sparkles } from 'lucide-react';
+import { Upload, Loader2, FileVideo, Music, Sparkles, AlertCircle } from 'lucide-react';
 import { useFirestore, useUser, useStorage } from '@/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
@@ -98,8 +98,15 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (isUserLoading) return;
+    console.log('[TRANSMISSION DEBUGGER] Phase 1: Init Validation');
+
+    if (isUserLoading) {
+      console.warn('[TRANSMISSION DEBUGGER] Stall: Auth is still loading.');
+      return;
+    }
+
     if (!user) {
+      console.error('[TRANSMISSION DEBUGGER] Error: No user session found.');
       toast({
         variant: "destructive",
         title: "Sign In Required",
@@ -110,6 +117,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
 
     const isInvalid = !title.trim() || !category || !selectedFile;
     if (isInvalid) {
+      console.error('[TRANSMISSION DEBUGGER] Error: Missing required fields (Title/Category/File).');
       setShowErrors(true);
       toast({
         variant: "destructive",
@@ -120,20 +128,23 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
     }
 
     if (!firestore || !storage) {
-       console.error('Firebase services not initialized');
+       console.error('[TRANSMISSION DEBUGGER] Critical: Firebase services (Firestore/Storage) not initialized.');
        toast({ variant: "destructive", title: "Config Error", description: "Firebase storage or database is missing." });
        return;
     }
 
     setIsProcessing(true);
     setUploadProgress(0);
-    console.log('[UploadModal] Upload Started...');
     
     try {
+      console.log('[TRANSMISSION DEBUGGER] Phase 2: Starting Parallel Execution');
+      
       const mediaType = selectedFile.type.startsWith('video') ? 'videos' : 'audio';
       const fileName = `${Date.now()}-${selectedFile.name.replace(/\s+/g, '_')}`;
       const storagePath = `users/${user.uid}/${mediaType}/${fileName}`;
       const storageRef = ref(storage, storagePath);
+
+      console.log('[TRANSMISSION DEBUGGER] Target path:', storagePath);
 
       // 1. Parallel Start: AI Analysis & Media Upload
       const aiPromise = analyzeVideoContent({ title, description });
@@ -144,15 +155,15 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
           'state_changed',
           (snapshot) => {
             const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            console.log(`[TRANSMISSION DEBUGGER] Upload Progress: ${Math.round(progress)}%`);
             setUploadProgress(progress);
           },
           (error) => {
-            console.error('[UploadModal] Storage Upload Error:', error);
-            // Storage errors don't use the FirestorePermissionError pattern, 
-            // but we'll surface them to the user via toast.
+            console.error('[TRANSMISSION DEBUGGER] Storage Error:', error.code, error.message);
             reject(error);
           },
           async () => {
+            console.log('[TRANSMISSION DEBUGGER] Upload Complete. Fetching URL...');
             const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
             resolve(downloadUrl);
           }
@@ -161,8 +172,10 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
 
       // 2. Wait for both to finish
       const [downloadUrl, aiResult] = await Promise.all([uploadPromise, aiPromise]);
+      console.log('[TRANSMISSION DEBUGGER] Phase 3: AI Analysis Results Received');
 
       if (!aiResult.isSafe) {
+        console.error('[TRANSMISSION DEBUGGER] Rejected: Safety Audit Failed.', aiResult.safetyReason);
         toast({
           variant: "destructive",
           title: "Safety Flag",
@@ -171,6 +184,8 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
         setIsProcessing(false);
         return;
       }
+
+      console.log('[TRANSMISSION DEBUGGER] Phase 4: Constructing Document');
 
       const videoData = {
         title,
@@ -195,16 +210,16 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
       };
 
       // 3. Database Entry
-      // Using .catch() chain to emit specialized permission errors if rules deny the write.
+      console.log('[TRANSMISSION DEBUGGER] Phase 5: Committing to Firestore Mesh...');
+      
       addDoc(collection(firestore, 'videos'), videoData)
         .then((docRef) => {
-          console.log('[UploadModal] Database Entry Created:', docRef.id);
+          console.log('[TRANSMISSION DEBUGGER] SUCCESS: Video ID:', docRef.id);
           toast({
             title: "Post Published!",
             description: "Your content is now live on the AlgoTube feed.",
           });
           
-          // Reset and close only on success
           setTitle('');
           setDescription('');
           setSelectedFile(null);
@@ -213,7 +228,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
           onClose();
         })
         .catch(async (error) => {
-          console.error('[UploadModal] Database Entry Failed:', error);
+          console.error('[TRANSMISSION DEBUGGER] Firestore Error:', error.message);
           
           const permissionError = new FirestorePermissionError({
             path: 'videos',
@@ -227,13 +242,13 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
           toast({
             variant: "destructive",
             title: "Publish Failed",
-            description: "Permission denied or database error. Check console for details.",
+            description: "Permission denied by the mesh. Check the debugger overlay.",
           });
           setIsProcessing(false);
         });
 
     } catch (error: any) {
-      console.error('[UploadModal] General Processing Error:', error);
+      console.error('[TRANSMISSION DEBUGGER] General Catch Block:', error.message);
       toast({
         variant: "destructive",
         title: "Transmission Failed",
