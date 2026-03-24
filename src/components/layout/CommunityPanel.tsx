@@ -1,14 +1,15 @@
 
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Send, MessageSquare, MoreVertical, ThumbsUp, ThumbsDown, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy, addDoc, serverTimestamp, doc, increment, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, doc, increment, serverTimestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import { addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
 interface CommunityPanelProps {
   videoId: string;
@@ -31,14 +32,16 @@ export default function CommunityPanel({ videoId }: CommunityPanelProps) {
 
   const { data: comments, isLoading } = useCollection(commentsQuery);
 
-  const handlePostComment = async () => {
+  const handlePostComment = () => {
     if (!user) {
       toast({ title: "Auth Required", description: "Sign in to join the conversation." });
       return;
     }
-    if (!newComment.trim() || !firestore) return;
+    
+    if (!newComment.trim() || !firestore || !videoId) return;
 
     setIsSubmitting(true);
+    
     const commentData = {
       videoId,
       userId: user.uid,
@@ -50,26 +53,30 @@ export default function CommunityPanel({ videoId }: CommunityPanelProps) {
       userAvatar: user.photoURL || `https://picsum.photos/seed/${user.uid}/40/40`
     };
 
-    try {
-      await addDoc(collection(firestore, 'videos', videoId, 'comments'), commentData);
-      
-      // Update comment count on video
-      const videoRef = doc(firestore, 'videos', videoId);
-      updateDoc(videoRef, { commentsCount: increment(1) });
-
-      setNewComment('');
-      toast({ title: "Comment Posted", description: "Your contribution is live on the mesh." });
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsSubmitting(false);
-    }
+    const commentsColRef = collection(firestore, 'videos', videoId, 'comments');
+    
+    // Non-blocking initiation
+    addDocumentNonBlocking(commentsColRef, commentData)
+      .then(() => {
+        // Increment comment count on the video document (also non-blocking)
+        const videoRef = doc(firestore, 'videos', videoId);
+        updateDocumentNonBlocking(videoRef, { commentsCount: increment(1) });
+        
+        setNewComment('');
+        toast({ 
+          title: "Comment Posted", 
+          description: "Your contribution is live on the mesh." 
+        });
+      })
+      .finally(() => {
+        setIsSubmitting(false);
+      });
   };
 
-  const handleLikeComment = async (commentId: string) => {
-    if (!firestore || !videoId) return;
+  const handleLikeComment = (commentId: string) => {
+    if (!firestore || !videoId || !commentId) return;
     const commentRef = doc(firestore, 'videos', videoId, 'comments', commentId);
-    updateDoc(commentRef, { likesCount: increment(1) });
+    updateDocumentNonBlocking(commentRef, { likesCount: increment(1) });
   };
 
   return (
