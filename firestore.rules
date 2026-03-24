@@ -1,0 +1,144 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * ALGOTUBE SECURITY RULES DOCUMENTATION
+     *
+     * Core Philosophy:
+     * This ruleset implements a dual-access model: private user data is strictly locked to the owner 
+     * based on path segments, while social content (videos, comments, public playlists) is globally 
+     * readable but strictly writable only by the original creator.
+     *
+     * Data Structure:
+     * - User-specific private data (Profiles, Interactions, Private Playlists) is nested under 
+     *   /userProfiles/{userId}/ for clear path-based authorization.
+     * - Shared/Social data (Videos, Comments, Public Playlists) is located in top-level or sub-collections 
+     *   optimized for global discovery and listing.
+     *
+     * Key Security Decisions:
+     * - Authorization Independence: Critical ownership fields (uploaderId, userId, ownerId) are 
+     *   denormalized onto every document. This allows rules to verify access without performing 
+     *   additional cross-document lookups (get() calls), ensuring high performance.
+     * - Path-Data Consistency: For user-nested collections, rules enforce that the internal 'userId' 
+     *   or 'ownerId' field matches the ID in the document path.
+     * - Relational Integrity: On document updates, relational fields that define ownership are 
+     *   marked as immutable to prevent "identity theft" of documents.
+     * - Prototyping Flexibility: While authorization is strictly enforced, the specific shape and 
+     *   data types of non-relational fields are not validated to allow for rapid schema iteration.
+     */
+
+    // --- GLOBAL HELPER FUNCTIONS ---
+
+    /** Checks if the request is from an authenticated user. */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /** Checks if the authenticated user's UID matches the provided userId. */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /** Checks if a document exists and belongs to the authenticated user. */
+    function isExistingOwner(userId) {
+      return resource != null && isOwner(userId);
+    }
+
+    /** Checks if the authenticated user matches the owner ID stored inside the document data. */
+    function isDataOwner(ownerField) {
+      return isSignedIn() && request.auth.uid == ownerField;
+    }
+
+    /** Checks if the existing document's internal owner field matches the authenticated user. */
+    function isExistingDataOwner(ownerField) {
+      return resource != null && isDataOwner(ownerField);
+    }
+
+    // --- COLLECTION RULES ---
+
+    /**
+     * @description Rules for user profile documents. Secured by path-based ownership.
+     * @path /userProfiles/{userId}
+     * @allow Authenticated user can create, read, update, or delete their own profile (get, list, create, update, delete).
+     * @deny Any user attempting to access a profile ID that does not match their own UID.
+     * @principle Enforces path-based ownership and relational integrity between UID and data fields.
+     */
+    match /userProfiles/{userId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+
+      /**
+       * @description Private user interactions with videos (views, likes, etc.).
+       * @path /userProfiles/{userId}/videoInteractions/{interactionId}
+       * @allow Owner listing their own history (list).
+       * @deny Unauthenticated users or users viewing another's private interaction history.
+       * @principle Restricts access to a user's own data tree.
+       */
+      match /videoInteractions/{interactionId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Private playlists owned by the user.
+       * @path /userProfiles/{userId}/playlists_private/{playlistId}
+       * @allow User managing their own private curated lists.
+       * @deny Public listing or access by other users.
+       * @principle Structural segregation of private vs public content.
+       */
+      match /playlists_private/{playlistId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.ownerId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.ownerId == resource.data.ownerId;
+        allow delete: if isExistingOwner(userId);
+      }
+    }
+
+    /**
+     * @description Global video collection for platform content.
+     * @path /videos/{videoId}
+     * @allow Public read access for all users (get, list). Authenticated uploaders can manage their own videos.
+     * @deny Non-owners attempting to edit or delete videos. Unauthenticated users attempting to upload.
+     * @principle Public Read with Owner-Only Writes via denormalized uploaderId.
+     */
+    match /videos/{videoId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && request.resource.data.uploaderId == request.auth.uid;
+      allow update: if isExistingDataOwner(resource.data.uploaderId) && request.resource.data.uploaderId == resource.data.uploaderId;
+      allow delete: if isExistingDataOwner(resource.data.uploaderId);
+
+      /**
+       * @description Comments associated with a specific video.
+       * @path /videos/{videoId}/comments/{commentId}
+       * @allow Anyone to view comments (get, list). Authenticated authors to manage their comments.
+       * @deny Users editing comments they did not write.
+       * @principle Enforces document ownership for writes while maintaining public visibility.
+       */
+      match /comments/{commentId} {
+        allow get, list: if true;
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+        allow update: if isExistingDataOwner(resource.data.userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingDataOwner(resource.data.userId);
+      }
+    }
+
+    /**
+     * @description Top-level collection for playlists marked as public.
+     * @path /playlists_public/{playlistId}
+     * @allow Public discovery and viewing (get, list). Authenticated owners to manage entries.
+     * @deny Modification of public metadata by anyone other than the owner.
+     * @principle Optimized for global listing of public-intent data.
+     */
+    match /playlists_public/{playlistId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isExistingDataOwner(resource.data.ownerId) && request.resource.data.ownerId == resource.data.ownerId;
+      allow delete: if isExistingDataOwner(resource.data.ownerId);
+    }
+  }
+}
