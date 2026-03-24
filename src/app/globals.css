@@ -51,4 +51,20 @@
   .neon-glow {
     box-shadow: 0 0 15px theme('colors.accent.DEFAULT / 40%');
   }
+
+  /* Thin, semi-transparent glassmorphic scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(116, 222, 236, 0.15);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(116, 222, 236, 0.25);
+  }
 }
