@@ -9,12 +9,14 @@ import CommunityPanel from '@/components/layout/CommunityPanel';
 import CanvasVideoPlayer from '@/components/video-player/CanvasVideoPlayer';
 import VideoCard from '@/components/video-card/VideoCard';
 import { MOCK_VIDEOS } from '@/app/lib/mock-data';
-import { useFirestore, useUser, useDoc, useMemoFirebase } from '@/firebase';
+import { useFirestore, useUser, useDoc, useMemoFirebase, useCollection } from '@/firebase';
 import { doc, runTransaction, increment, serverTimestamp, setDoc } from 'firebase/firestore';
-import { Share2, ThumbsUp, ThumbsDown, Eye, Sparkles, ShieldCheck } from 'lucide-react';
+import { Share2, ThumbsUp, ThumbsDown, Eye, Sparkles, ShieldCheck, UserPlus, UserCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { personalizeVideoRecommendations, PersonalizedVideoRecommendationsOutput } from '@/ai/flows/personalized-video-recommendations-flow';
+import { toggleSubscription, addToHistory } from '@/firebase/social-logic';
+import { cn } from '@/lib/utils';
 
 export default function VideoDetailPage() {
   const { id } = useParams();
@@ -28,9 +30,24 @@ export default function VideoDetailPage() {
   }, [firestore, id]);
 
   const { data: video, isLoading } = useDoc(videoRef);
+  
+  const subRef = useMemoFirebase(() => {
+    if (!firestore || !user || !video?.uploaderId) return null;
+    return doc(firestore, 'userProfiles', user.uid, 'subscriptions', video.uploaderId);
+  }, [firestore, user, video?.uploaderId]);
+
+  const { data: subscription } = useDoc(subRef);
+  const isSubscribed = !!subscription;
+
   const [recommendations, setRecommendations] = useState<PersonalizedVideoRecommendationsOutput | null>(null);
 
   const displayVideo = video || MOCK_VIDEOS.find(v => v.id === id) || MOCK_VIDEOS[0];
+
+  useEffect(() => {
+    if (user && firestore && id) {
+      addToHistory(firestore, user.uid, id as string);
+    }
+  }, [id, user, firestore]);
 
   useEffect(() => {
     async function getRecommendations() {
@@ -43,7 +60,7 @@ export default function VideoDetailPage() {
         availableVideos: MOCK_VIDEOS.map(v => ({
           id: v.id,
           title: v.title,
-          description: v.title, // Use title as desc for mock
+          description: v.title,
           tags: v.tags
         }))
       });
@@ -81,10 +98,26 @@ export default function VideoDetailPage() {
         });
       });
       
-      toast({ title: "Success!", description: `Mesh interaction recorded: ${type}` });
+      toast({ title: "Success!", description: `Interaction recorded: ${type}` });
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const handleSubscribe = async () => {
+    if (!user || !firestore || !video?.uploaderId) {
+      toast({ title: "Action Required", description: "Sign in to subscribe to creators." });
+      return;
+    }
+
+    // Optimistic UI logic could go here, but toggleSubscription handles the firestore side
+    await toggleSubscription(firestore, user.uid, video.uploaderId, isSubscribed);
+    
+    toast({
+      title: isSubscribed ? "Unsubscribed" : "Subscribed",
+      description: isSubscribed ? "Creator removed from your mesh." : "Creator added to your mesh.",
+      variant: isSubscribed ? "default" : "default"
+    });
   };
 
   const handleShare = async () => {
@@ -129,7 +162,17 @@ export default function VideoDetailPage() {
                     <h3 className="font-bold text-sm">{displayVideo.creator || "Mesh Creator"}</h3>
                     <p className="text-xs text-muted-foreground">AlgoTube Citizen</p>
                   </div>
-                  <Button className="ml-4 bg-white text-black hover:bg-white/90 rounded-xl font-headline font-bold">SUBSCRIBE</Button>
+                  <Button 
+                    onClick={handleSubscribe}
+                    className={cn(
+                      "ml-4 rounded-xl font-headline font-bold transition-all duration-300",
+                      isSubscribed 
+                        ? "bg-accent/10 text-accent border border-accent/40 shadow-[0_0_15px_rgba(116,222,236,0.2)]" 
+                        : "bg-white text-black hover:bg-white/90"
+                    )}
+                  >
+                    {isSubscribed ? <><UserCheck className="mr-2" size={16} /> SUBSCRIBED</> : <><UserPlus className="mr-2" size={16} /> SUBSCRIBE</>}
+                  </Button>
                 </div>
 
                 <div className="flex items-center gap-2">
