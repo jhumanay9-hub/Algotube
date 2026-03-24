@@ -154,6 +154,54 @@
         "uploaderId",
         "processingStatus"
       ]
+    },
+    "Comment": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Comment",
+      "type": "object",
+      "description": "Represents a user's comment on a specific video.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the comment."
+        },
+        "videoId": {
+          "type": "string",
+          "description": "The ID of the video this comment belongs to."
+        },
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who posted the comment."
+        },
+        "userName": {
+          "type": "string",
+          "description": "Display name of the user."
+        },
+        "userAvatar": {
+          "type": "string",
+          "description": "URL to the user's avatar image.",
+          "format": "uri"
+        },
+        "content": {
+          "type": "string",
+          "description": "The text content of the comment."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the comment was created.",
+          "format": "date-time"
+        },
+        "likesCount": {
+          "type": "number",
+          "description": "Number of likes on the comment."
+        }
+      },
+      "required": [
+        "videoId",
+        "userId",
+        "content",
+        "createdAt"
+      ]
     }
   },
   "auth": {
@@ -182,6 +230,16 @@
             "$ref": "#/backend/entities/Video"
           },
           "description": "Stores all publicly viewable videos."
+        }
+      },
+      {
+        "path": "/videos/{videoId}/comments/{commentId}",
+        "definition": {
+          "entityName": "Comment",
+          "schema": {
+            "$ref": "#/backend/entities/Comment"
+          },
+          "description": "Sub-collection of comments for each video."
         }
       }
     ]

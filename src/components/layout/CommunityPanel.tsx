@@ -7,9 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, doc, increment, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, doc, increment, serverTimestamp, addDoc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 interface CommunityPanelProps {
   videoId: string;
@@ -32,7 +33,7 @@ export default function CommunityPanel({ videoId }: CommunityPanelProps) {
 
   const { data: comments, isLoading } = useCollection(commentsQuery);
 
-  const handlePostComment = () => {
+  const handlePostComment = async () => {
     if (!user) {
       toast({ title: "Auth Required", description: "Sign in to join the conversation." });
       return;
@@ -54,29 +55,50 @@ export default function CommunityPanel({ videoId }: CommunityPanelProps) {
     };
 
     const commentsColRef = collection(firestore, 'videos', videoId, 'comments');
+    const videoRef = doc(firestore, 'videos', videoId);
     
-    // Non-blocking initiation
-    addDocumentNonBlocking(commentsColRef, commentData)
-      .then(() => {
-        // Increment comment count on the video document (also non-blocking)
-        const videoRef = doc(firestore, 'videos', videoId);
-        updateDocumentNonBlocking(videoRef, { commentsCount: increment(1) });
-        
-        setNewComment('');
-        toast({ 
-          title: "Comment Posted", 
-          description: "Your contribution is live on the mesh." 
-        });
-      })
-      .finally(() => {
-        setIsSubmitting(false);
+    try {
+      // Use direct addDoc to ensure we catch errors correctly for user feedback
+      await addDoc(commentsColRef, commentData);
+      
+      // Update comment count on video
+      updateDoc(videoRef, { commentsCount: increment(1) }).catch(() => {
+        // Silent fail for meta count
       });
+      
+      setNewComment('');
+      toast({ 
+        title: "Comment Posted", 
+        description: "Your contribution is live on the mesh." 
+      });
+    } catch (e: any) {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: `videos/${videoId}/comments`,
+        operation: 'create',
+        requestResourceData: commentData,
+      }));
+      
+      toast({ 
+        variant: "destructive",
+        title: "Contribution Failed", 
+        description: "The mesh rejected your transmission. Ensure you are logged in." 
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleLikeComment = (commentId: string) => {
     if (!firestore || !videoId || !commentId) return;
     const commentRef = doc(firestore, 'videos', videoId, 'comments', commentId);
-    updateDocumentNonBlocking(commentRef, { likesCount: increment(1) });
+    
+    updateDoc(commentRef, { likesCount: increment(1) }).catch(e => {
+       errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: commentRef.path,
+        operation: 'update',
+        requestResourceData: { likesCount: 'increment' },
+      }));
+    });
   };
 
   return (

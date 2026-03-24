@@ -55,7 +55,7 @@ service cloud.firestore {
 
       match /comments/{commentId} {
         allow get, list: if true;
-        allow create: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
         allow update: if isDataOwner(resource.data.userId) || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'dislikesCount']));
         allow delete: if isDataOwner(resource.data.userId);
       }
