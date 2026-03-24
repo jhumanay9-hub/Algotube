@@ -62,7 +62,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('Tech');
+  const [category, setCategory] = useState('Entertainment');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showErrors, setShowErrors] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -95,6 +95,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
     // Validation Algorithm
     const isInvalid = !title.trim() || !category || !selectedFile;
     if (isInvalid) {
+      console.log('Validation Failed:', { title: !!title.trim(), category: !!category, file: !!selectedFile });
       setShowErrors(true);
       toast({
         variant: "destructive",
@@ -104,103 +105,114 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
       return;
     }
 
-    if (!user || !storage || !firestore) return;
+    if (!user || !storage || !firestore) {
+      console.error('Firebase services or user not initialized');
+      return;
+    }
 
     setIsUploading(true);
     console.log('Upload Started...');
     
-    const mediaType = selectedFile.type.startsWith('video') ? 'videos' : 'audio';
-    const fileName = `${Date.now()}-${selectedFile.name}`;
-    const storagePath = `users/${user.uid}/${mediaType}/${fileName}`;
-    const storageRef = ref(storage, storagePath);
+    try {
+      const mediaType = selectedFile.type.startsWith('video') ? 'videos' : 'audio';
+      const fileName = `${Date.now()}-${selectedFile.name.replace(/\s+/g, '_')}`;
+      const storagePath = `users/${user.uid}/${mediaType}/${fileName}`;
+      const storageRef = ref(storage, storagePath);
 
-    const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+      const uploadTask = uploadBytesResumable(storageRef, selectedFile);
 
-    uploadTask.on(
-      'state_changed',
-      (snapshot) => {
-        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-        setUploadProgress(progress);
-      },
-      (error) => {
-        console.error('Upload Error:', error);
-        setIsUploading(false);
-        toast({
-          variant: "destructive",
-          title: "Upload Failed",
-          description: error.message,
-        });
-      },
-      async () => {
-        try {
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadProgress(progress);
+        },
+        (error) => {
+          console.error('Storage Upload Error:', error);
           setIsUploading(false);
-          setIsAnalyzing(true);
-          console.log('File successfully written to Storage. Starting AI Analysis...');
-          
-          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-          const aiResult = await analyzeVideoContent({ title, description });
-
-          if (!aiResult.isSafe) {
-            console.warn('AI Safety Flag triggered:', aiResult.safetyReason);
-            toast({
-              variant: "destructive",
-              title: "Content Flagged",
-              description: `Community safety violation detected: ${aiResult.safetyReason || 'Inappropriate content'}`,
-            });
-            setIsAnalyzing(false);
-            return;
-          }
-
-          const aspectRatio = (selectedFile.size < 50 * 1024 * 1024) ? "9:16" : "16:9";
-
-          const videoData = {
-            title,
-            description,
-            aiSummary: aiResult.summary,
-            videoUrl: downloadUrl,
-            thumbnailUrl: `https://picsum.photos/seed/${Math.random()}/640/360`,
-            uploaderId: user.uid,
-            uploadDate: serverTimestamp(),
-            viewsCount: 0,
-            likesCount: 0,
-            dislikesCount: 0,
-            commentsCount: 0,
-            shareCount: 0,
-            processingStatus: 'ready',
-            category,
-            mediaType: selectedFile.type,
-            tags: aiResult.seoTags,
-            safetyFlag: false,
-            duration: 15,
-            aspectRatio: aspectRatio,
-          };
-
-          const docRef = await addDoc(collection(firestore, 'videos'), videoData);
-          console.log('Database Entry Created:', docRef.id);
-          
-          toast({
-            title: "Content Published!",
-            description: "AI analysis complete. Your media is live.",
-          });
-          
-          // Reset and close
-          setTitle('');
-          setDescription('');
-          setSelectedFile(null);
-          setShowErrors(false);
-          onClose();
-        } catch (error: any) {
-          console.error('Finalization Error:', error);
           toast({
             variant: "destructive",
-            title: "Processing Error",
-            description: "Failed to finalize media processing.",
+            title: "Upload Failed",
+            description: "An error occurred while uploading to the mesh storage.",
           });
-        } finally {
-          setIsAnalyzing(false);
+        },
+        async () => {
+          try {
+            console.log('File successfully uploaded to Storage. Starting AI Analysis...');
+            setIsUploading(false);
+            setIsAnalyzing(true);
+            
+            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+            
+            // AI Processing Step
+            const aiResult = await analyzeVideoContent({ title, description });
+            console.log('AI Analysis Result:', aiResult);
+
+            if (!aiResult.isSafe) {
+              console.warn('AI Safety Flag triggered:', aiResult.safetyReason);
+              toast({
+                variant: "destructive",
+                title: "Content Flagged",
+                description: `Community safety violation: ${aiResult.safetyReason || 'Inappropriate content'}`,
+              });
+              setIsAnalyzing(false);
+              return;
+            }
+
+            const aspectRatio = (selectedFile.size < 50 * 1024 * 1024) ? "9:16" : "16:9";
+
+            const videoData = {
+              title,
+              description,
+              aiSummary: aiResult.summary,
+              videoUrl: downloadUrl,
+              thumbnailUrl: `https://picsum.photos/seed/${Math.floor(Math.random() * 1000)}/640/360`,
+              uploaderId: user.uid,
+              uploadDate: serverTimestamp(),
+              viewsCount: 0,
+              likesCount: 0,
+              dislikesCount: 0,
+              commentsCount: 0,
+              shareCount: 0,
+              processingStatus: 'ready',
+              category,
+              mediaType: selectedFile.type,
+              tags: aiResult.seoTags,
+              duration: 15,
+              aspectRatio: aspectRatio,
+              creator: user.displayName || "Anonymous Creator"
+            };
+
+            const docRef = await addDoc(collection(firestore, 'videos'), videoData);
+            console.log('Database Entry Created:', docRef.id);
+            
+            toast({
+              title: "Stream Published!",
+              description: "AI analysis complete. Your content is now live on the mesh.",
+            });
+            
+            // Reset and close
+            setTitle('');
+            setDescription('');
+            setSelectedFile(null);
+            setShowErrors(false);
+            onClose();
+          } catch (error: any) {
+            console.error('Finalization Error:', error);
+            toast({
+              variant: "destructive",
+              title: "Processing Error",
+              description: "Failed to finalize content mapping. Please check connectivity.",
+            });
+          } finally {
+            setIsAnalyzing(false);
+          }
         }
-      }
-    );
+      );
+    } catch (e) {
+      console.error('Upload initiation failed:', e);
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -209,10 +221,10 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
         <div className="p-6 sm:p-8">
           <DialogHeader className="mb-6">
             <DialogTitle className="text-2xl font-headline font-bold flex items-center gap-2">
-              <Upload className="text-accent" /> Share New Media
+              <Upload className="text-accent" /> Share Your Transmission
             </DialogTitle>
             <DialogDescription className="text-muted-foreground font-body">
-              Upload your high-fidelity content to the decentralized mesh.
+              Upload your high-fidelity content to the decentralized AlgoTube mesh.
             </DialogDescription>
           </DialogHeader>
 
@@ -271,9 +283,9 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
               </div>
 
               <div className="space-y-2">
-                <Label className={cn(showErrors && !title.trim() && "text-destructive")}>Media Title</Label>
+                <Label className={cn(showErrors && !title.trim() && "text-destructive")}>Stream Title</Label>
                 <Input 
-                  placeholder="Deep Dive into React 19" 
+                  placeholder="e.g., My Summer Adventure" 
                   value={title} 
                   onChange={e => setTitle(e.target.value)}
                   className={cn(
@@ -286,7 +298,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
               <div className="space-y-2">
                 <Label>Description</Label>
                 <Textarea 
-                  placeholder="Tell the community about your content..." 
+                  placeholder="Share the story behind this transmission..." 
                   value={description}
                   onChange={e => setDescription(e.target.value)}
                   className="bg-white/5 border-white/10 focus:border-accent min-h-[100px]"
@@ -297,14 +309,14 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
                 <Label className={cn(showErrors && !category && "text-destructive")}>Category</Label>
                 <select 
                   className={cn(
-                    "flex h-10 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 appearance-none",
+                    "flex h-10 w-full rounded-md border border-white/10 bg-white/15 px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 appearance-none",
                     showErrors && !category && "border-destructive shadow-[0_0_10px_rgba(239,68,68,0.2)]"
                   )}
                   value={category}
                   onChange={e => setCategory(e.target.value)}
                 >
                   <option value="" disabled>Select a category</option>
-                  {["Cybersecurity", "Social Life", "Computer Science", "Physics", "Tech", "Entertainment"].map(c => (
+                  {["Entertainment", "Vlogs", "Gaming", "Tech", "Education", "Music", "Cybersecurity"].map(c => (
                     <option key={c} value={c} className="bg-background text-foreground">{c}</option>
                   ))}
                 </select>

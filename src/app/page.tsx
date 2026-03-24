@@ -7,12 +7,12 @@ import Sidebar from '@/components/layout/Sidebar';
 import VideoCard from '@/components/video-card/VideoCard';
 import { MOCK_VIDEOS } from '@/app/lib/mock-data';
 import { heapSortTrending } from '@/lib/sorting';
-import { TrendingUp, Sparkles, Zap, Video, Filter } from 'lucide-react';
+import { TrendingUp, Sparkles, Zap, Video, Filter, Heart } from 'lucide-react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, where, limit } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
-const CATEGORIES = ["All", "Cybersecurity", "Social Life", "Computer Science", "Physics"];
+const CATEGORIES = ["All", "Entertainment", "Social Life", "Computer Science", "Physics", "Cybersecurity"];
 
 /**
  * Fisher-Yates Shuffle Algorithm for mixing results
@@ -43,7 +43,6 @@ export default function Home() {
     const baseVideos = [...(firestoreVideos || []), ...MOCK_VIDEOS];
     
     if (selectedCategory === "All") {
-      // Fisher-Yates shuffle the first batch for diversity
       return shuffle(baseVideos).slice(0, 24);
     }
     
@@ -85,24 +84,24 @@ export default function Home() {
           {selectedCategory === "All" && (
             <div className="mb-10 glass-panel rounded-3xl p-8 relative overflow-hidden group min-h-[320px] flex items-center">
               <div className="absolute top-0 right-0 p-12 opacity-10 group-hover:opacity-20 transition-opacity">
-                <Video size={200} className="text-accent" />
+                <Heart size={200} className="text-accent fill-accent/20" />
               </div>
               
               <div className="relative z-10 max-w-2xl">
                 <div className="flex items-center gap-2 mb-4 text-accent">
                   <Sparkles size={20} />
-                  <span className="font-code text-xs tracking-widest uppercase">Community Choice: Global Feed</span>
+                  <span className="font-code text-xs tracking-widest uppercase">Global Feed: Creator Spotlight</span>
                 </div>
                 <h1 className="text-5xl font-headline font-bold mb-4 bg-gradient-to-r from-white via-white to-accent bg-clip-text text-transparent leading-tight">
-                  Discover the Next <br/>Big Story in Tech
+                  Connect Through <br/>Your Next Story
                 </h1>
                 <p className="text-muted-foreground font-body leading-relaxed mb-8 text-lg">
-                  Join thousands of creators sharing their insights and building the future 
-                  of decentralized streaming together.
+                  Join a community of thousands of creators sharing their world, building connections, 
+                  and redefining social streaming.
                 </p>
                 <button className="px-8 py-3 rounded-xl bg-accent text-background font-headline font-bold hover:neon-glow transition-all flex items-center gap-2 group">
                   <Zap size={18} className="fill-background" />
-                  EXPLORE NOW
+                  DISCOVER NOW
                 </button>
               </div>
             </div>
@@ -111,7 +110,9 @@ export default function Home() {
           <div className="mb-6 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <TrendingUp className="text-accent" size={24} />
-              <h2 className="text-xl font-headline font-bold">{selectedCategory === "All" ? "Trending Now" : `${selectedCategory} Spotlight`}</h2>
+              <h2 className="text-xl font-headline font-bold">
+                {selectedCategory === "All" ? "Hot on AlgoTube" : `${selectedCategory} Transmissions`}
+              </h2>
             </div>
           </div>
 
@@ -133,7 +134,7 @@ export default function Home() {
             <>
               <div className="mb-6 flex items-center gap-3">
                 <Sparkles className="text-accent" size={24} />
-                <h2 className="text-xl font-headline font-bold">Recommended for {user.displayName || "You"}</h2>
+                <h2 className="text-xl font-headline font-bold">Personalized for {user.displayName || "You"}</h2>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-12">
