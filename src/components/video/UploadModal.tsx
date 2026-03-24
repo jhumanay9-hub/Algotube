@@ -58,13 +58,17 @@ const CircularProgress = ({ progress, label }: CircularProgressProps) => {
   );
 };
 
+interface UploadModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
 export function UploadModal({ isOpen, onClose }: UploadModalProps) {
-  const [isUploading, setIsUploading] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('Entertainment');
+  const [category, setCategory] = useState('Social Media');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showErrors, setShowErrors] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -94,7 +98,6 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Check if services/user ready
     if (isUserLoading) return;
     if (!user) {
       toast({
@@ -105,7 +108,6 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
       return;
     }
 
-    // Validation
     const isInvalid = !title.trim() || !category || !selectedFile;
     if (isInvalid) {
       setShowErrors(true);
@@ -118,11 +120,13 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
     }
 
     if (!firestore || !storage) {
-       console.error('Firebase services or user not initialized');
+       console.error('Firebase services not initialized');
+       toast({ variant: "destructive", title: "Config Error", description: "Firebase storage or database is missing." });
        return;
     }
 
-    setIsUploading(true);
+    setIsProcessing(true);
+    setUploadProgress(0);
     console.log('Upload Started...');
     
     try {
@@ -131,106 +135,96 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
       const storagePath = `users/${user.uid}/${mediaType}/${fileName}`;
       const storageRef = ref(storage, storagePath);
 
+      // 1. Parallel Start: AI Analysis & Media Upload
+      const aiPromise = analyzeVideoContent({ title, description });
+      
       const uploadTask = uploadBytesResumable(storageRef, selectedFile);
-
-      uploadTask.on(
-        'state_changed',
-        (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          setUploadProgress(progress);
-        },
-        (error) => {
-          console.error('Storage Upload Error:', error);
-          setIsUploading(false);
-          toast({
-            variant: "destructive",
-            title: "Upload Failed",
-            description: "Connection to mesh storage interrupted.",
-          });
-        },
-        async () => {
-          try {
-            console.log('Media stored. Initializing AI analysis...');
-            setIsUploading(false);
-            setIsAnalyzing(true);
-            
+      const uploadPromise = new Promise<string>((resolve, reject) => {
+        uploadTask.on(
+          'state_changed',
+          (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            setUploadProgress(progress);
+          },
+          (error) => {
+            console.error('Storage Upload Error:', error);
+            reject(error);
+          },
+          async () => {
             const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-            
-            // AI Analysis
-            const aiResult = await analyzeVideoContent({ title, description });
-            
-            if (!aiResult.isSafe) {
-              toast({
-                variant: "destructive",
-                title: "Safety Flag",
-                description: `Post rejected: ${aiResult.safetyReason || 'Community guideline violation'}`,
-              });
-              setIsAnalyzing(true); // stay in state briefly
-              setTimeout(() => setIsAnalyzing(false), 2000);
-              return;
-            }
-
-            const videoData = {
-              title,
-              description,
-              aiSummary: aiResult.summary,
-              videoUrl: downloadUrl,
-              thumbnailUrl: `https://picsum.photos/seed/${Math.floor(Math.random() * 1000)}/640/360`,
-              uploaderId: user.uid,
-              uploadDate: serverTimestamp(),
-              viewsCount: 0,
-              likesCount: 0,
-              dislikesCount: 0,
-              commentsCount: 0,
-              shareCount: 0,
-              processingStatus: 'ready',
-              category,
-              mediaType: selectedFile.type,
-              tags: aiResult.seoTags,
-              duration: 15,
-              aspectRatio: (selectedFile.size < 50 * 1024 * 1024) ? "9:16" : "16:9",
-              creator: user.displayName || "New Creator"
-            };
-
-            // Non-blocking Firestore Mutation
-            addDoc(collection(firestore, 'videos'), videoData)
-              .then((docRef) => {
-                console.log('Database Entry Created:', docRef.id);
-              })
-              .catch((error) => {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
-                  path: 'videos',
-                  operation: 'create',
-                  requestResourceData: videoData
-                }));
-              });
-
-            toast({
-              title: "Post Published!",
-              description: "Your video is now live on the AlgoTube feed.",
-            });
-            
-            // Reset and close
-            setTitle('');
-            setDescription('');
-            setSelectedFile(null);
-            setShowErrors(false);
-            onClose();
-          } catch (error: any) {
-            console.error('Finalization Error:', error);
-            toast({
-              variant: "destructive",
-              title: "System Error",
-              description: "AI analysis or database sync failed.",
-            });
-          } finally {
-            setIsAnalyzing(false);
+            resolve(downloadUrl);
           }
-        }
-      );
-    } catch (e) {
-      console.error('Upload initiation failed:', e);
-      setIsUploading(false);
+        );
+      });
+
+      // 2. Wait for both to finish
+      const [downloadUrl, aiResult] = await Promise.all([uploadPromise, aiPromise]);
+
+      if (!aiResult.isSafe) {
+        toast({
+          variant: "destructive",
+          title: "Safety Flag",
+          description: `Post rejected: ${aiResult.safetyReason || 'Community guideline violation'}`,
+        });
+        setIsProcessing(false);
+        return;
+      }
+
+      const videoData = {
+        title,
+        description,
+        aiSummary: aiResult.summary,
+        videoUrl: downloadUrl,
+        thumbnailUrl: `https://picsum.photos/seed/${Math.floor(Math.random() * 1000)}/640/360`,
+        uploaderId: user.uid,
+        uploadDate: serverTimestamp(),
+        viewsCount: 0,
+        likesCount: 0,
+        dislikesCount: 0,
+        commentsCount: 0,
+        shareCount: 0,
+        processingStatus: 'ready',
+        category,
+        mediaType: selectedFile.type,
+        tags: aiResult.seoTags,
+        duration: 15,
+        aspectRatio: (selectedFile.size < 50 * 1024 * 1024) ? "9:16" : "16:9",
+        creator: user.displayName || "New Creator"
+      };
+
+      // 3. Database Entry (Non-blocking)
+      addDoc(collection(firestore, 'videos'), videoData)
+        .then((docRef) => {
+          console.log('Database Entry Created:', docRef.id);
+        })
+        .catch((error) => {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'videos',
+            operation: 'create',
+            requestResourceData: videoData
+          }));
+        });
+
+      toast({
+        title: "Post Published!",
+        description: "Your content is now live on the AlgoTube feed.",
+      });
+      
+      // Reset and close
+      setTitle('');
+      setDescription('');
+      setSelectedFile(null);
+      setShowErrors(false);
+      setIsProcessing(false);
+      onClose();
+    } catch (error: any) {
+      console.error('Optimization/Upload Error:', error);
+      toast({
+        variant: "destructive",
+        title: "Publish Failed",
+        description: error.message || "An unexpected error occurred during the transmission.",
+      });
+      setIsProcessing(false);
     }
   };
 
@@ -247,18 +241,18 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
             </DialogDescription>
           </DialogHeader>
 
-          {isUploading || isAnalyzing ? (
+          {isProcessing ? (
             <div className="flex flex-col items-center justify-center py-12 gap-6">
               <CircularProgress 
-                progress={isUploading ? uploadProgress : 100} 
-                label={isUploading ? `Uploading: ${Math.round(uploadProgress)}%` : "AI is optimizing your content..."} 
+                progress={uploadProgress} 
+                label={uploadProgress < 100 ? `Broadcasting: ${Math.round(uploadProgress)}%` : "AI Optimization in progress..."} 
               />
-              {isAnalyzing && (
-                <div className="flex flex-col items-center gap-2 animate-pulse">
-                  <Sparkles size={20} className="text-accent" />
-                  <p className="text-[10px] text-accent font-code font-bold">GENERATING SEO & SAFETY AUDIT</p>
-                </div>
-              )}
+              <div className="flex flex-col items-center gap-2 animate-pulse text-center px-8">
+                <Sparkles size={20} className="text-accent" />
+                <p className="text-[10px] text-accent font-code font-bold uppercase tracking-widest">
+                  {uploadProgress < 100 ? "Sending Data to Mesh" : "Processing Semantic Insights"}
+                </p>
+              </div>
             </div>
           ) : (
             <form onSubmit={handleUpload} className="space-y-6">
@@ -335,26 +329,21 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
                   onChange={e => setCategory(e.target.value)}
                 >
                   <option value="" disabled>Choose a Category</option>
-                  {["Entertainment", "Social Life", "Tech", "Computer Science", "Physics", "Music", "Vlogs"].map(c => (
+                  {["Social Media", "Entertainment", "Social Life", "Tech", "Computer Science", "Physics", "Music", "Vlogs"].map(c => (
                     <option key={c} value={c} className="bg-background text-foreground">{c}</option>
                   ))}
                 </select>
               </div>
 
               <div className="pt-4 flex flex-col sm:flex-row items-center justify-end gap-4 border-t border-white/5 sticky bottom-0 bg-black/50 backdrop-blur-md pb-2">
-                {isUploading && (
-                  <span className="text-xs font-code text-accent animate-pulse">
-                    Broadcasting: {Math.round(uploadProgress)}%
-                  </span>
-                )}
                 <div className="flex gap-3 w-full sm:w-auto">
                   <Button type="button" variant="ghost" onClick={onClose} className="flex-1 sm:flex-none hover:bg-white/10">Cancel</Button>
                   <Button 
                     type="submit" 
                     className="flex-1 sm:flex-none bg-accent text-background hover:neon-glow font-bold shadow-[0_0_15px_rgba(116,222,236,0.3)]"
-                    disabled={isUploading || isAnalyzing}
+                    disabled={isProcessing}
                   >
-                    {isUploading ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2" size={16} />}
+                    {isProcessing ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2" size={16} />}
                     PUBLISH POST
                   </Button>
                 </div>
