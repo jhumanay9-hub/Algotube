@@ -127,7 +127,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
 
     setIsProcessing(true);
     setUploadProgress(0);
-    console.log('Upload Started...');
+    console.log('[UploadModal] Upload Started...');
     
     try {
       const mediaType = selectedFile.type.startsWith('video') ? 'videos' : 'audio';
@@ -147,7 +147,9 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
             setUploadProgress(progress);
           },
           (error) => {
-            console.error('Storage Upload Error:', error);
+            console.error('[UploadModal] Storage Upload Error:', error);
+            // Storage errors don't use the FirestorePermissionError pattern, 
+            // but we'll surface them to the user via toast.
             reject(error);
           },
           async () => {
@@ -192,36 +194,49 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
         creator: user.displayName || "New Creator"
       };
 
-      // 3. Database Entry (Non-blocking)
+      // 3. Database Entry
+      // Using .catch() chain to emit specialized permission errors if rules deny the write.
       addDoc(collection(firestore, 'videos'), videoData)
         .then((docRef) => {
-          console.log('Database Entry Created:', docRef.id);
+          console.log('[UploadModal] Database Entry Created:', docRef.id);
+          toast({
+            title: "Post Published!",
+            description: "Your content is now live on the AlgoTube feed.",
+          });
+          
+          // Reset and close only on success
+          setTitle('');
+          setDescription('');
+          setSelectedFile(null);
+          setShowErrors(false);
+          setIsProcessing(false);
+          onClose();
         })
-        .catch((error) => {
-          errorEmitter.emit('permission-error', new FirestorePermissionError({
+        .catch(async (error) => {
+          console.error('[UploadModal] Database Entry Failed:', error);
+          
+          const permissionError = new FirestorePermissionError({
             path: 'videos',
             operation: 'create',
             requestResourceData: videoData
-          }));
+          });
+
+          // Emit the error so the global listener can catch it
+          errorEmitter.emit('permission-error', permissionError);
+          
+          toast({
+            variant: "destructive",
+            title: "Publish Failed",
+            description: "Permission denied or database error. Check console for details.",
+          });
+          setIsProcessing(false);
         });
 
-      toast({
-        title: "Post Published!",
-        description: "Your content is now live on the AlgoTube feed.",
-      });
-      
-      // Reset and close
-      setTitle('');
-      setDescription('');
-      setSelectedFile(null);
-      setShowErrors(false);
-      setIsProcessing(false);
-      onClose();
     } catch (error: any) {
-      console.error('Optimization/Upload Error:', error);
+      console.error('[UploadModal] General Processing Error:', error);
       toast({
         variant: "destructive",
-        title: "Publish Failed",
+        title: "Transmission Failed",
         description: error.message || "An unexpected error occurred during the transmission.",
       });
       setIsProcessing(false);
