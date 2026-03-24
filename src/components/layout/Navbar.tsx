@@ -2,12 +2,13 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Bell, User, Upload, Shield, LogIn } from 'lucide-react';
+import { Search, Bell, User, Upload, Shield, LogIn, LogOut } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { VideoTrie } from '@/lib/trie';
 import { MOCK_VIDEOS } from '@/app/lib/mock-data';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useUser, useAuth } from '@/firebase';
 import { UploadModal } from '@/components/video/UploadModal';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -21,6 +22,12 @@ export default function Navbar() {
 
   const { user } = useUser();
   const auth = useAuth();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await auth.signOut();
+    router.push('/trending');
+  };
 
   const trie = useMemo(() => {
     const vTrie = new VideoTrie();
@@ -115,32 +122,39 @@ export default function Navbar() {
                 <DropdownMenuItem className="hover:bg-accent/10 cursor-pointer">Profile Settings</DropdownMenuItem>
                 <DropdownMenuItem className="hover:bg-accent/10 cursor-pointer">My Studio</DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-white/10" />
-                <DropdownMenuItem className="text-destructive hover:bg-destructive/10 cursor-pointer" onClick={() => auth.signOut()}>
-                  Sign Out
+                <DropdownMenuItem 
+                  className="text-destructive hover:bg-destructive/10 hover:shadow-[0_0_15px_rgba(239,68,68,0.2)] cursor-pointer" 
+                  onClick={handleLogout}
+                >
+                  <LogOut size={16} className="mr-2" /> Log Out
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </>
         ) : (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="w-10 h-10 rounded-xl border border-white/10 hover:border-accent/40 bg-white/5">
-                <User size={20} className="text-muted-foreground" />
+          <div className="flex items-center gap-2">
+            <Link href="/auth">
+              <Button variant="outline" className="hidden sm:flex items-center gap-2 rounded-xl border-accent/30 text-accent hover:bg-accent hover:text-background font-bold transition-all">
+                <LogIn size={18} /> SIGN IN
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="glass-panel border-white/10 mt-2 min-w-[200px]" align="end">
-              <DropdownMenuLabel className="font-headline">Account</DropdownMenuLabel>
-              <DropdownMenuSeparator className="bg-white/10" />
-              <Link href="/auth">
-                <DropdownMenuItem className="hover:bg-accent/10 cursor-pointer flex items-center gap-2 font-bold text-accent">
-                  <LogIn size={16} /> Sign In
-                </DropdownMenuItem>
-              </Link>
-              <DropdownMenuSeparator className="bg-white/10" />
-              <DropdownMenuItem className="hover:bg-white/5 cursor-pointer">Language: English</DropdownMenuItem>
-              <DropdownMenuItem className="hover:bg-white/5 cursor-pointer">Help & Feedback</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </Link>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="w-10 h-10 rounded-xl border border-white/10 hover:border-accent/40 bg-white/5 sm:hidden">
+                  <User size={20} className="text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="glass-panel border-white/10 mt-2 min-w-[200px]" align="end">
+                <DropdownMenuLabel className="font-headline">Account</DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-white/10" />
+                <Link href="/auth">
+                  <DropdownMenuItem className="hover:bg-accent/10 cursor-pointer flex items-center gap-2 font-bold text-accent">
+                    <LogIn size={16} /> Sign In
+                  </DropdownMenuItem>
+                </Link>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         )}
       </div>
 

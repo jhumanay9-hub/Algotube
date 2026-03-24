@@ -75,6 +75,7 @@ export default function VideoDetailPage() {
       return;
     }
 
+    console.log('Current User UID:', user.uid);
     const interactionRef = doc(firestore, 'userProfiles', user.uid, 'videoInteractions', `${id}_${type}`);
     const videoRef = doc(firestore, 'videos', id as string);
 
@@ -110,7 +111,7 @@ export default function VideoDetailPage() {
       return;
     }
 
-    // Optimistic UI logic could go here, but toggleSubscription handles the firestore side
+    console.log('Current User UID:', user.uid);
     await toggleSubscription(firestore, user.uid, video.uploaderId, isSubscribed);
     
     toast({
