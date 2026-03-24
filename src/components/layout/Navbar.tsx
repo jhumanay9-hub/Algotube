@@ -2,17 +2,25 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Bell, User, Upload, Shield } from 'lucide-react';
+import { Search, Bell, User, Upload, Shield, LogIn } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { VideoTrie } from '@/lib/trie';
 import { MOCK_VIDEOS } from '@/app/lib/mock-data';
 import Link from 'next/link';
+import { useUser, useAuth } from '@/firebase';
+import { UploadModal } from '@/components/video/UploadModal';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+
+  const { user } = useUser();
+  const auth = useAuth();
 
   const trie = useMemo(() => {
     const vTrie = new VideoTrie();
@@ -54,7 +62,7 @@ export default function Navbar() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-accent transition-colors" size={18} />
           <Input 
             className="w-full pl-10 bg-white/5 border-white/10 focus:border-accent/50 focus:ring-accent/20 rounded-xl font-body"
-            placeholder="Search decentralized streams..."
+            placeholder="Search creators and content..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setShowSuggestions(true)}
@@ -77,16 +85,51 @@ export default function Navbar() {
       </div>
 
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-xl">
-          <Upload size={20} />
-        </Button>
-        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-xl">
-          <Bell size={20} />
-        </Button>
-        <div className="w-10 h-10 rounded-xl border border-accent/30 bg-accent/5 overflow-hidden p-0.5">
-          <img src="https://picsum.photos/seed/user1/100/100" alt="Avatar" className="w-full h-full rounded-[inherit] object-cover" />
-        </div>
+        {user ? (
+          <>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-xl"
+              onClick={() => setIsUploadOpen(true)}
+            >
+              <Upload size={20} />
+            </Button>
+            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-xl">
+              <Bell size={20} />
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="p-0.5 w-10 h-10 rounded-xl border border-accent/30 bg-accent/5 overflow-hidden">
+                  <Avatar className="w-full h-full rounded-[inherit]">
+                    <AvatarImage src={user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`} />
+                    <AvatarFallback>{user.displayName?.[0] || user.email?.[0]}</AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="glass-panel border-white/10 mt-2 min-w-[200px]" align="end">
+                <DropdownMenuLabel className="font-headline">{user.displayName || "Explorer"}</DropdownMenuLabel>
+                <DropdownMenuItem className="text-xs text-muted-foreground cursor-default">{user.email}</DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-white/10" />
+                <DropdownMenuItem className="hover:bg-accent/10 cursor-pointer">Profile Settings</DropdownMenuItem>
+                <DropdownMenuItem className="hover:bg-accent/10 cursor-pointer">My Studio</DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-white/10" />
+                <DropdownMenuItem className="text-destructive hover:bg-destructive/10 cursor-pointer" onClick={() => auth.signOut()}>
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        ) : (
+          <Link href="/auth">
+            <Button className="bg-accent text-background hover:neon-glow font-bold rounded-xl flex items-center gap-2">
+              <LogIn size={18} /> Sign In
+            </Button>
+          </Link>
+        )}
       </div>
+
+      <UploadModal isOpen={isUploadOpen} onClose={() => setIsUploadOpen(false)} />
     </nav>
   );
 }
