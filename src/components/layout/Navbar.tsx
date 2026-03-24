@@ -15,12 +15,14 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import Sidebar from './Sidebar';
+import { cn } from '@/lib/utils';
 
 export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [shouldGlow, setShouldGlow] = useState(false);
 
   const { user } = useUser();
   const auth = useAuth();
@@ -30,6 +32,16 @@ export default function Navbar() {
     await auth.signOut();
     router.push('/trending');
   };
+
+  useEffect(() => {
+    const handleGlow = () => {
+      setShouldGlow(true);
+      setTimeout(() => setShouldGlow(false), 3000);
+    };
+
+    window.addEventListener('auth-required-glow', handleGlow);
+    return () => window.removeEventListener('auth-required-glow', handleGlow);
+  }, []);
 
   const trie = useMemo(() => {
     const vTrie = new VideoTrie();
@@ -127,14 +139,20 @@ export default function Navbar() {
         
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="p-0.5 w-10 h-10 rounded-xl border border-accent/30 bg-accent/5 overflow-hidden group">
+            <Button 
+              variant="ghost" 
+              className={cn(
+                "p-0.5 w-10 h-10 rounded-xl border border-accent/30 bg-accent/5 overflow-hidden group transition-all duration-500",
+                shouldGlow && "shadow-[0_0_25px_rgba(116,222,236,1)] border-accent ring-2 ring-accent/50 scale-110"
+              )}
+            >
               {user ? (
                 <Avatar className="w-full h-full rounded-[inherit]">
                   <AvatarImage src={user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`} />
                   <AvatarFallback>{user.displayName?.[0] || user.email?.[0]}</AvatarFallback>
                 </Avatar>
               ) : (
-                <UserCircle size={24} className="text-muted-foreground group-hover:text-accent transition-colors" />
+                <UserCircle size={24} className={cn("text-muted-foreground group-hover:text-accent transition-colors", shouldGlow && "text-accent")} />
               )}
             </Button>
           </DropdownMenuTrigger>

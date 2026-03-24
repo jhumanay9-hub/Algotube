@@ -1,9 +1,10 @@
+
 'use client';
 
 import React, { DependencyList, createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
 import { FirebaseApp } from 'firebase/app';
 import { Firestore } from 'firebase/firestore';
-import { Auth, User, onAuthStateChanged } from 'firebase/auth';
+import { Auth, User, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { FirebaseStorage } from 'firebase/storage';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener'
 
@@ -69,7 +70,10 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
       return;
     }
 
-    setUserAuthState({ user: null, isUserLoading: true, userError: null });
+    // Explicitly set persistence to ensure session stays active across refreshes
+    setPersistence(auth, browserLocalPersistence).catch((err) => {
+      console.error("Auth: Failed to set persistence:", err);
+    });
 
     const unsubscribe = onAuthStateChanged(
       auth,

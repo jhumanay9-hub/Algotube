@@ -11,7 +11,7 @@ import VideoCard from '@/components/video-card/VideoCard';
 import { MOCK_VIDEOS } from '@/app/lib/mock-data';
 import { useFirestore, useUser, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, runTransaction, increment, serverTimestamp, setDoc } from 'firebase/firestore';
-import { Share2, ThumbsUp, ThumbsDown, Eye, Sparkles, ShieldCheck, UserPlus, UserCheck, Loader2 } from 'lucide-react';
+import { Share2, ThumbsUp, ThumbsDown, Eye, Sparkles, ShieldCheck, UserPlus, UserCheck, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { personalizeVideoRecommendations, PersonalizedVideoRecommendationsOutput } from '@/ai/flows/personalized-video-recommendations-flow';
@@ -22,7 +22,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function VideoDetailPage() {
   const { id } = useParams();
-  const { firestore } = useFirestore();
+  const { firestore, auth } = useFirestore() as any; // Using auth from context
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
@@ -73,12 +73,23 @@ export default function VideoDetailPage() {
 
   const handleInteraction = async (type: 'like' | 'dislike') => {
     if (isUserLoading) return;
-    if (!user || !firestore || !id) {
-      toast({ title: "Auth Required", description: "Sign in to interact with content." });
+    
+    // Debug log for interaction tracking
+    console.log('Action attempted by:', user?.email || 'Anonymous');
+
+    if (!user) {
+      // Dispatch custom event to trigger Navbar glow
+      window.dispatchEvent(new CustomEvent('auth-required-glow'));
+      toast({ 
+        variant: "destructive",
+        title: "Auth Required", 
+        description: "Sign in to define the stance on this transmission." 
+      });
       return;
     }
 
-    console.log('Current User UID:', user.uid);
+    if (!firestore || !id) return;
+
     const interactionRef = doc(firestore, 'userProfiles', user.uid, 'videoInteractions', `${id}_${type}`);
     const videoRef = doc(firestore, 'videos', id as string);
 
@@ -117,12 +128,23 @@ export default function VideoDetailPage() {
 
   const handleSubscribe = async () => {
     if (isUserLoading) return;
-    if (!user || !firestore || !video?.uploaderId) {
-      toast({ title: "Action Required", description: "Sign in to subscribe to creators." });
+
+    // Debug log for subscription tracking
+    console.log('Action attempted by:', user?.email || 'Anonymous');
+
+    if (!user) {
+      // Dispatch custom event to trigger Navbar glow
+      window.dispatchEvent(new CustomEvent('auth-required-glow'));
+      toast({ 
+        variant: "destructive",
+        title: "Action Required", 
+        description: "Sign in to subscribe to creators." 
+      });
       return;
     }
 
-    console.log('Current User UID:', user.uid);
+    if (!firestore || !video?.uploaderId) return;
+
     await toggleSubscription(firestore, user.uid, video.uploaderId, isSubscribed);
     
     toast({
@@ -147,8 +169,16 @@ export default function VideoDetailPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="flex flex-col h-screen overflow-hidden relative">
       <Navbar />
+
+      {/* Global Loading Spinner for Auth State */}
+      {isUserLoading && (
+        <div className="absolute inset-0 z-[100] bg-background/50 backdrop-blur-md flex flex-col items-center justify-center gap-4">
+          <div className="w-16 h-16 border-4 border-accent/20 border-t-accent rounded-full animate-spin shadow-[0_0_20px_rgba(116,222,236,0.2)]" />
+          <p className="font-code text-xs text-accent animate-pulse uppercase tracking-[0.2em]">Syncing Mesh Identity...</p>
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
