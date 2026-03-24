@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Bell, User, Upload, Shield, LogIn, LogOut } from 'lucide-react';
+import { Search, Bell, User, Upload, Shield, LogIn, LogOut, Menu } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { VideoTrie } from '@/lib/trie';
@@ -13,6 +13,8 @@ import { useUser, useAuth } from '@/firebase';
 import { UploadModal } from '@/components/video/UploadModal';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import Sidebar from './Sidebar';
 
 export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,22 +57,38 @@ export default function Navbar() {
 
   return (
     <nav className="sticky top-0 z-50 glass-panel border-b-0 m-4 rounded-2xl px-6 py-3 flex items-center justify-between">
-      <Link href="/" className="flex items-center gap-2 group">
-        <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center group-hover:neon-glow transition-all">
-          <Shield className="text-accent" size={24} />
-        </div>
-        <span className="font-headline font-bold text-2xl tracking-tight bg-gradient-to-r from-white to-accent bg-clip-text text-transparent">
-          AlgoTube
-        </span>
-      </Link>
+      <div className="flex items-center gap-4">
+        {/* Mobile Menu Trigger */}
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="lg:hidden text-muted-foreground hover:text-accent">
+              <Menu size={24} />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="p-0 border-none bg-transparent w-72">
+            <SheetHeader className="sr-only">
+              <SheetTitle>Navigation Menu</SheetTitle>
+            </SheetHeader>
+            <Sidebar isMobile />
+          </SheetContent>
+        </Sheet>
 
-      <div className="flex-1 max-w-2xl px-12 relative">
+        <Link href="/" className="flex items-center gap-2 group">
+          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center group-hover:neon-glow transition-all">
+            <Shield className="text-accent" size={24} />
+          </div>
+          <span className="font-headline font-bold text-2xl tracking-tight bg-gradient-to-r from-white to-accent bg-clip-text text-transparent hidden sm:block">
+            AlgoTube
+          </span>
+        </Link>
+      </div>
+
+      <div className="flex-1 max-w-2xl px-4 sm:px-12 relative">
         <div className="relative group">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-accent transition-colors" size={18} />
           <Input 
             className="w-full pl-10 bg-white/5 border-white/10 focus:border-accent/50 focus:ring-accent/20 rounded-xl font-body"
-            placeholder="Search creators and content..."
-            search-hint="video content"
+            placeholder="Search the mesh..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setShowSuggestions(true)}
@@ -79,7 +97,7 @@ export default function Navbar() {
         </div>
 
         {showSuggestions && suggestions.length > 0 && (
-          <div className="absolute top-full left-12 right-12 mt-2 glass-panel border border-white/10 rounded-xl overflow-hidden animate-in fade-in slide-in-from-top-2">
+          <div className="absolute top-full left-4 right-4 sm:left-12 sm:right-12 mt-2 glass-panel border border-white/10 rounded-xl overflow-hidden animate-in fade-in slide-in-from-top-2">
             {suggestions.map((s, idx) => (
               <button 
                 key={idx}
@@ -103,7 +121,7 @@ export default function Navbar() {
             >
               <Upload size={20} />
             </Button>
-            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-xl">
+            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-xl hidden sm:flex">
               <Bell size={20} />
             </Button>
             <DropdownMenu>
@@ -132,29 +150,11 @@ export default function Navbar() {
             </DropdownMenu>
           </>
         ) : (
-          <div className="flex items-center gap-2">
-            <Link href="/auth">
-              <Button variant="outline" className="hidden sm:flex items-center gap-2 rounded-xl border-accent/30 text-accent hover:bg-accent hover:text-background font-bold transition-all">
-                <LogIn size={18} /> SIGN IN
-              </Button>
-            </Link>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="w-10 h-10 rounded-xl border border-white/10 hover:border-accent/40 bg-white/5 sm:hidden">
-                  <User size={20} className="text-muted-foreground" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="glass-panel border-white/10 mt-2 min-w-[200px]" align="end">
-                <DropdownMenuLabel className="font-headline">Account</DropdownMenuLabel>
-                <DropdownMenuSeparator className="bg-white/10" />
-                <Link href="/auth">
-                  <DropdownMenuItem className="hover:bg-accent/10 cursor-pointer flex items-center gap-2 font-bold text-accent">
-                    <LogIn size={16} /> Sign In
-                  </DropdownMenuItem>
-                </Link>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <Link href="/auth">
+            <Button variant="outline" className="items-center gap-2 rounded-xl border-accent/30 text-accent hover:bg-accent hover:text-background font-bold transition-all shadow-[0_0_15px_rgba(116,222,236,0.1)]">
+              <LogIn size={18} /> <span className="hidden sm:inline">SIGN IN</span>
+            </Button>
+          </Link>
         )}
       </div>
 

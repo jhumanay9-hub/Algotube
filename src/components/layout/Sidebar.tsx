@@ -2,7 +2,7 @@
 "use client";
 
 import React from 'react';
-import { Home, TrendingUp, Users, Clock, ThumbsUp, Layers, Settings, HelpCircle, LogIn, LogOut, Zap } from 'lucide-react';
+import { Home, TrendingUp, Users, Clock, ThumbsUp, Layers, Settings, HelpCircle, LogIn, LogOut, Zap, Layout } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useUser, useAuth } from '@/firebase';
@@ -16,12 +16,17 @@ const MENU_ITEMS = [
 ];
 
 const LIBRARY_ITEMS = [
+  { icon: Layout, label: 'Library', href: '/library' },
   { icon: Clock, label: 'History', href: '/history' },
   { icon: ThumbsUp, label: 'Liked', href: '/liked' },
   { icon: Users, label: 'Community', href: '/community' },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  isMobile?: boolean;
+}
+
+export default function Sidebar({ isMobile }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useUser();
@@ -59,9 +64,13 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="w-64 glass-panel m-4 mt-0 rounded-2xl p-4 flex flex-col gap-8 hidden lg:flex">
+    <aside className={cn(
+      "glass-panel m-4 mt-0 rounded-2xl p-4 flex flex-col gap-8",
+      !isMobile && "w-64 hidden lg:flex h-[calc(100vh-120px)]",
+      isMobile && "w-full h-full m-0 rounded-none bg-black/90 backdrop-blur-3xl"
+    )}>
       <div>
-        <h3 className="text-xs font-headline font-semibold text-muted-foreground uppercase tracking-widest mb-4 px-4">Menu</h3>
+        <h3 className="text-xs font-headline font-semibold text-muted-foreground uppercase tracking-widest mb-4 px-4">Navigation</h3>
         <div className="space-y-1">
           {MENU_ITEMS.map((item) => (
             <SidebarItem key={item.label} {...item} />
@@ -72,7 +81,7 @@ export default function Sidebar() {
               icon={LogIn} 
               label="Sign In" 
               href="/auth" 
-              className="text-accent font-bold bg-accent/5 border border-accent/10 hover:bg-accent/10" 
+              className="text-accent font-bold bg-accent/5 border border-accent/10 hover:bg-accent/10 shadow-[0_0_10px_rgba(116,222,236,0.1)] mt-4" 
             />
           ) : (
             <SidebarItem 
@@ -80,14 +89,14 @@ export default function Sidebar() {
               label="Log Out" 
               href="#" 
               onClick={handleLogout}
-              className="hover:text-destructive hover:bg-destructive/10 hover:shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+              className="hover:text-destructive hover:bg-destructive/10 hover:shadow-[0_0_15px_rgba(239,68,68,0.2)] mt-4"
             />
           )}
         </div>
       </div>
 
       <div>
-        <h3 className="text-xs font-headline font-semibold text-muted-foreground uppercase tracking-widest mb-4 px-4">Library</h3>
+        <h3 className="text-xs font-headline font-semibold text-muted-foreground uppercase tracking-widest mb-4 px-4">Your Library</h3>
         <div className="space-y-1">
           {LIBRARY_ITEMS.map((item) => (
             <SidebarItem key={item.label} {...item} />
@@ -100,12 +109,14 @@ export default function Sidebar() {
           <SidebarItem icon={Settings} label="Settings" href="/settings" />
           <SidebarItem icon={HelpCircle} label="Help" href="/help" />
         </div>
-        <div className="mt-6 p-4 rounded-xl bg-gradient-to-br from-primary/20 to-accent/5 border border-white/5">
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            AlgoTube v1.0.42<br/>
-            Mesh Status: <span className="text-accent">ONLINE</span>
-          </p>
-        </div>
+        {!isMobile && (
+          <div className="mt-6 p-4 rounded-xl bg-gradient-to-br from-primary/20 to-accent/5 border border-white/5">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              AlgoTube v1.2.0<br/>
+              Mesh Status: <span className="text-accent animate-pulse font-bold">STABLE</span>
+            </p>
+          </div>
+        )}
       </div>
       <style jsx global>{`
         .neon-red {
