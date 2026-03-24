@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Bell, User, Upload, Shield, LogIn, LogOut, Menu } from 'lucide-react';
+import { Search, Bell, Upload, Shield, LogIn, LogOut, Menu, UserCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { VideoTrie } from '@/lib/trie';
@@ -88,7 +88,7 @@ export default function Navbar() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-accent transition-colors" size={18} />
           <Input 
             className="w-full pl-10 bg-white/5 border-white/10 focus:border-accent/50 focus:ring-accent/20 rounded-xl font-body"
-            placeholder="Search the mesh..."
+            placeholder="Search the community..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setShowSuggestions(true)}
@@ -111,34 +111,41 @@ export default function Navbar() {
       </div>
 
       <div className="flex items-center gap-3">
-        {user ? (
-          <>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-xl"
-              onClick={() => setIsUploadOpen(true)}
-            >
-              <Upload size={20} />
+        {user && (
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-xl"
+            onClick={() => setIsUploadOpen(true)}
+          >
+            <Upload size={20} />
+          </Button>
+        )}
+        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-xl hidden sm:flex">
+          <Bell size={20} />
+        </Button>
+        
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="p-0.5 w-10 h-10 rounded-xl border border-accent/30 bg-accent/5 overflow-hidden group">
+              {user ? (
+                <Avatar className="w-full h-full rounded-[inherit]">
+                  <AvatarImage src={user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`} />
+                  <AvatarFallback>{user.displayName?.[0] || user.email?.[0]}</AvatarFallback>
+                </Avatar>
+              ) : (
+                <UserCircle size={24} className="text-muted-foreground group-hover:text-accent transition-colors" />
+              )}
             </Button>
-            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-accent hover:bg-accent/10 rounded-xl hidden sm:flex">
-              <Bell size={20} />
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="p-0.5 w-10 h-10 rounded-xl border border-accent/30 bg-accent/5 overflow-hidden">
-                  <Avatar className="w-full h-full rounded-[inherit]">
-                    <AvatarImage src={user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`} />
-                    <AvatarFallback>{user.displayName?.[0] || user.email?.[0]}</AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="glass-panel border-white/10 mt-2 min-w-[200px]" align="end">
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="glass-panel border-white/10 mt-2 min-w-[200px]" align="end">
+            {user ? (
+              <>
                 <DropdownMenuLabel className="font-headline">{user.displayName || "Explorer"}</DropdownMenuLabel>
                 <DropdownMenuItem className="text-xs text-muted-foreground cursor-default">{user.email}</DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-white/10" />
-                <DropdownMenuItem className="hover:bg-accent/10 cursor-pointer">Profile Settings</DropdownMenuItem>
-                <DropdownMenuItem className="hover:bg-accent/10 cursor-pointer">My Studio</DropdownMenuItem>
+                <DropdownMenuItem className="hover:bg-accent/10 cursor-pointer">Channel Settings</DropdownMenuItem>
+                <DropdownMenuItem className="hover:bg-accent/10 cursor-pointer">Creator Studio</DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-white/10" />
                 <DropdownMenuItem 
                   className="text-destructive hover:bg-destructive/10 hover:shadow-[0_0_15px_rgba(239,68,68,0.2)] cursor-pointer" 
@@ -146,16 +153,21 @@ export default function Navbar() {
                 >
                   <LogOut size={16} className="mr-2" /> Log Out
                 </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </>
-        ) : (
-          <Link href="/auth">
-            <Button variant="outline" className="items-center gap-2 rounded-xl border-accent/30 text-accent hover:bg-accent hover:text-background font-bold transition-all shadow-[0_0_15px_rgba(116,222,236,0.1)]">
-              <LogIn size={18} /> <span className="hidden sm:inline">SIGN IN</span>
-            </Button>
-          </Link>
-        )}
+              </>
+            ) : (
+              <>
+                <DropdownMenuLabel className="font-headline">Guest Session</DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-white/10" />
+                <DropdownMenuItem className="hover:bg-accent/10 cursor-pointer font-bold text-accent" onClick={() => router.push('/auth')}>
+                  <LogIn size={16} className="mr-2" /> Sign In
+                </DropdownMenuItem>
+                <DropdownMenuItem className="hover:bg-accent/10 cursor-pointer" onClick={() => router.push('/help')}>
+                  Help Center
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <UploadModal isOpen={isUploadOpen} onClose={() => setIsUploadOpen(false)} />

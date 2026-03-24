@@ -7,13 +7,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, X, Loader2, Video as VideoIcon, Music, FileVideo, CheckCircle2, Sparkles, ShieldAlert } from 'lucide-react';
+import { Upload, Loader2, FileVideo, Music, Sparkles } from 'lucide-react';
 import { useFirestore, useUser, useStorage } from '@/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { useToast } from '@/hooks/use-toast';
 import { analyzeVideoContent } from '@/ai/flows/analyze-video-content-flow';
 import { cn } from '@/lib/utils';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 interface UploadModalProps {
   isOpen: boolean;
@@ -69,7 +71,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
 
   const { firestore } = useFirestore();
   const storage = useStorage();
-  const { user } = useUser();
+  const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -83,7 +85,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
         toast({
           variant: "destructive",
           title: "Invalid file type",
-          description: "Please upload .mp4, .mov, .mp3, or .wav",
+          description: "Supported formats: .mp4, .mov, .mp3, .wav",
         });
       }
     }
@@ -92,21 +94,26 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validation Algorithm
-    const isInvalid = !title.trim() || !category || !selectedFile;
-    if (isInvalid) {
-      console.log('Validation Failed:', { title: !!title.trim(), category: !!category, file: !!selectedFile });
-      setShowErrors(true);
+    // Check if services/user ready
+    if (isUserLoading) return;
+    if (!user) {
       toast({
         variant: "destructive",
-        title: "Missing Metadata",
-        description: "Please fill in all required fields and select a file.",
+        title: "Sign In Required",
+        description: "You must be logged in to post videos to the community.",
       });
       return;
     }
 
-    if (!user || !storage || !firestore) {
-      console.error('Firebase services or user not initialized');
+    // Validation
+    const isInvalid = !title.trim() || !category || !selectedFile;
+    if (isInvalid) {
+      setShowErrors(true);
+      toast({
+        variant: "destructive",
+        title: "Missing Information",
+        description: "Please provide a title, category, and select a media file.",
+      });
       return;
     }
 
@@ -133,33 +140,30 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
           toast({
             variant: "destructive",
             title: "Upload Failed",
-            description: "An error occurred while uploading to the mesh storage.",
+            description: "Connection to mesh storage interrupted.",
           });
         },
         async () => {
           try {
-            console.log('File successfully uploaded to Storage. Starting AI Analysis...');
+            console.log('Media stored. Initializing AI analysis...');
             setIsUploading(false);
             setIsAnalyzing(true);
             
             const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
             
-            // AI Processing Step
+            // AI Analysis
             const aiResult = await analyzeVideoContent({ title, description });
-            console.log('AI Analysis Result:', aiResult);
-
+            
             if (!aiResult.isSafe) {
-              console.warn('AI Safety Flag triggered:', aiResult.safetyReason);
               toast({
                 variant: "destructive",
-                title: "Content Flagged",
-                description: `Community safety violation: ${aiResult.safetyReason || 'Inappropriate content'}`,
+                title: "Safety Flag",
+                description: `Post rejected: ${aiResult.safetyReason || 'Community guideline violation'}`,
               });
-              setIsAnalyzing(false);
+              setIsAnalyzing(true); // stay in state briefly
+              setTimeout(() => setIsAnalyzing(false), 2000);
               return;
             }
-
-            const aspectRatio = (selectedFile.size < 50 * 1024 * 1024) ? "9:16" : "16:9";
 
             const videoData = {
               title,
@@ -179,16 +183,26 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
               mediaType: selectedFile.type,
               tags: aiResult.seoTags,
               duration: 15,
-              aspectRatio: aspectRatio,
-              creator: user.displayName || "Anonymous Creator"
+              aspectRatio: (selectedFile.size < 50 * 1024 * 1024) ? "9:16" : "16:9",
+              creator: user.displayName || "New Creator"
             };
 
-            const docRef = await addDoc(collection(firestore, 'videos'), videoData);
-            console.log('Database Entry Created:', docRef.id);
-            
+            // Non-blocking Firestore Mutation
+            addDoc(collection(firestore, 'videos'), videoData)
+              .then((docRef) => {
+                console.log('Database Entry Created:', docRef.id);
+              })
+              .catch((error) => {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                  path: 'videos',
+                  operation: 'create',
+                  requestResourceData: videoData
+                }));
+              });
+
             toast({
-              title: "Stream Published!",
-              description: "AI analysis complete. Your content is now live on the mesh.",
+              title: "Post Published!",
+              description: "Your video is now live on the AlgoTube feed.",
             });
             
             // Reset and close
@@ -201,8 +215,8 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
             console.error('Finalization Error:', error);
             toast({
               variant: "destructive",
-              title: "Processing Error",
-              description: "Failed to finalize content mapping. Please check connectivity.",
+              title: "System Error",
+              description: "AI analysis or database sync failed.",
             });
           } finally {
             setIsAnalyzing(false);
@@ -217,14 +231,14 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="glass-panel border-white/10 bg-black/80 backdrop-blur-2xl text-foreground max-w-xl max-h-[90vh] overflow-y-auto custom-scrollbar p-0">
+      <DialogContent className="glass-panel border-white/10 bg-black/80 backdrop-blur-2xl text-foreground max-w-xl max-h-[90vh] overflow-y-auto custom-scrollbar p-0 shadow-2xl">
         <div className="p-6 sm:p-8">
           <DialogHeader className="mb-6">
             <DialogTitle className="text-2xl font-headline font-bold flex items-center gap-2">
-              <Upload className="text-accent" /> Share Your Transmission
+              <Upload className="text-accent" /> Share Your Story
             </DialogTitle>
             <DialogDescription className="text-muted-foreground font-body">
-              Upload your high-fidelity content to the decentralized AlgoTube mesh.
+              Upload your high-fidelity content to the AlgoTube creator community.
             </DialogDescription>
           </DialogHeader>
 
@@ -232,12 +246,12 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
             <div className="flex flex-col items-center justify-center py-12 gap-6">
               <CircularProgress 
                 progress={isUploading ? uploadProgress : 100} 
-                label={isUploading ? "Uploading to mesh..." : "AI is analyzing your video..."} 
+                label={isUploading ? `Uploading: ${Math.round(uploadProgress)}%` : "AI is optimizing your content..."} 
               />
               {isAnalyzing && (
                 <div className="flex flex-col items-center gap-2 animate-pulse">
                   <Sparkles size={20} className="text-accent" />
-                  <p className="text-[10px] text-accent font-code font-bold">OPTIMIZING SEO & SAFETY</p>
+                  <p className="text-[10px] text-accent font-code font-bold">GENERATING SEO & SAFETY AUDIT</p>
                 </div>
               )}
             </div>
@@ -266,7 +280,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
                     </div>
                     <span className="text-sm font-code text-accent font-bold truncate max-w-full px-4">{selectedFile.name}</span>
                     <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedFile(null); }} className="text-xs text-muted-foreground hover:text-destructive">
-                      Remove
+                      Change File
                     </Button>
                   </>
                 ) : (
@@ -275,17 +289,17 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
                       <Upload className="text-muted-foreground group-hover:text-accent" />
                     </div>
                     <div className="text-center">
-                      <p className="text-sm font-bold">Click to select or drag & drop</p>
-                      <p className="text-[10px] text-muted-foreground mt-1">MP4, MOV, MP3, WAV (MAX 100MB)</p>
+                      <p className="text-sm font-bold">Select video or audio</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">MP4, MOV, MP3, WAV (Max 100MB)</p>
                     </div>
                   </>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label className={cn(showErrors && !title.trim() && "text-destructive")}>Stream Title</Label>
+                <Label className={cn(showErrors && !title.trim() && "text-destructive")}>Post Title</Label>
                 <Input 
-                  placeholder="e.g., My Summer Adventure" 
+                  placeholder="What's this about?" 
                   value={title} 
                   onChange={e => setTitle(e.target.value)}
                   className={cn(
@@ -298,10 +312,10 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
               <div className="space-y-2">
                 <Label>Description</Label>
                 <Textarea 
-                  placeholder="Share the story behind this transmission..." 
+                  placeholder="Tell your viewers more about this..." 
                   value={description}
                   onChange={e => setDescription(e.target.value)}
-                  className="bg-white/5 border-white/10 focus:border-accent min-h-[100px]"
+                  className="bg-white/5 border-white/10 focus:border-accent min-h-[100px] custom-scrollbar"
                 />
               </div>
 
@@ -309,34 +323,34 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
                 <Label className={cn(showErrors && !category && "text-destructive")}>Category</Label>
                 <select 
                   className={cn(
-                    "flex h-10 w-full rounded-md border border-white/10 bg-white/15 px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 appearance-none",
+                    "flex h-10 w-full rounded-md border border-white/10 bg-white/10 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent appearance-none",
                     showErrors && !category && "border-destructive shadow-[0_0_10px_rgba(239,68,68,0.2)]"
                   )}
                   value={category}
                   onChange={e => setCategory(e.target.value)}
                 >
-                  <option value="" disabled>Select a category</option>
-                  {["Entertainment", "Vlogs", "Gaming", "Tech", "Education", "Music", "Cybersecurity"].map(c => (
+                  <option value="" disabled>Choose a Category</option>
+                  {["Entertainment", "Social Life", "Tech", "Computer Science", "Physics", "Music", "Vlogs"].map(c => (
                     <option key={c} value={c} className="bg-background text-foreground">{c}</option>
                   ))}
                 </select>
               </div>
 
-              <div className="pt-4 flex flex-col sm:flex-row items-center justify-end gap-4 border-t border-white/5">
+              <div className="pt-4 flex flex-col sm:flex-row items-center justify-end gap-4 border-t border-white/5 sticky bottom-0 bg-black/50 backdrop-blur-md pb-2">
                 {isUploading && (
                   <span className="text-xs font-code text-accent animate-pulse">
-                    Uploading: {Math.round(uploadProgress)}%
+                    Broadcasting: {Math.round(uploadProgress)}%
                   </span>
                 )}
                 <div className="flex gap-3 w-full sm:w-auto">
                   <Button type="button" variant="ghost" onClick={onClose} className="flex-1 sm:flex-none hover:bg-white/10">Cancel</Button>
                   <Button 
                     type="submit" 
-                    className="flex-1 sm:flex-none bg-accent text-background hover:neon-glow font-bold"
+                    className="flex-1 sm:flex-none bg-accent text-background hover:neon-glow font-bold shadow-[0_0_15px_rgba(116,222,236,0.3)]"
                     disabled={isUploading || isAnalyzing}
                   >
                     {isUploading ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2" size={16} />}
-                    PUBLISH CONTENT
+                    PUBLISH POST
                   </Button>
                 </div>
               </div>
@@ -344,6 +358,18 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
           )}
         </div>
       </DialogContent>
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(116, 222, 236, 0.15);
+          border-radius: 10px;
+        }
+      `}</style>
     </Dialog>
   );
 }

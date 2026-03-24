@@ -1,13 +1,13 @@
 
 "use client";
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import VideoCard from '@/components/video-card/VideoCard';
 import { MOCK_VIDEOS } from '@/app/lib/mock-data';
 import { heapSortTrending } from '@/lib/sorting';
-import { TrendingUp, Sparkles, Zap, Video, Filter, Heart } from 'lucide-react';
+import { TrendingUp, Sparkles, Zap, Heart } from 'lucide-react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, where, limit } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -42,11 +42,14 @@ export default function Home() {
   const displayVideos = useMemo(() => {
     const baseVideos = [...(firestoreVideos || []), ...MOCK_VIDEOS];
     
+    // Deduplicate by ID to prevent key errors (e.g., if a mock video is also in Firestore)
+    const uniqueVideos = Array.from(new Map(baseVideos.map(v => [v.id, v])).values());
+    
     if (selectedCategory === "All") {
-      return shuffle(baseVideos).slice(0, 24);
+      return shuffle(uniqueVideos).slice(0, 24);
     }
     
-    return baseVideos.filter(v => 
+    return uniqueVideos.filter(v => 
       v.category === selectedCategory || 
       (v as any).tags?.some((t: string) => t.toLowerCase() === selectedCategory.toLowerCase())
     );
@@ -63,7 +66,7 @@ export default function Home() {
         
         <main className="flex-1 overflow-y-auto p-4 pt-0 custom-scrollbar">
           {/* Category Filter Bar */}
-          <div className="flex items-center gap-2 mb-6 overflow-x-auto py-4 scrollbar-hide no-scrollbar">
+          <div className="flex items-center gap-2 mb-6 overflow-x-auto py-4 scrollbar-hide no-scrollbar sticky top-0 bg-background/50 backdrop-blur-md z-20">
             {CATEGORIES.map((cat) => (
               <button
                 key={cat}
@@ -90,18 +93,18 @@ export default function Home() {
               <div className="relative z-10 max-w-2xl">
                 <div className="flex items-center gap-2 mb-4 text-accent">
                   <Sparkles size={20} />
-                  <span className="font-code text-xs tracking-widest uppercase">Global Feed: Creator Spotlight</span>
+                  <span className="font-code text-xs tracking-widest uppercase">Community: Creator Spotlight</span>
                 </div>
                 <h1 className="text-5xl font-headline font-bold mb-4 bg-gradient-to-r from-white via-white to-accent bg-clip-text text-transparent leading-tight">
-                  Connect Through <br/>Your Next Story
+                  Your Story <br/>Shared Globally
                 </h1>
                 <p className="text-muted-foreground font-body leading-relaxed mb-8 text-lg">
                   Join a community of thousands of creators sharing their world, building connections, 
-                  and redefining social streaming.
+                  and defining the next generation of social streaming.
                 </p>
                 <button className="px-8 py-3 rounded-xl bg-accent text-background font-headline font-bold hover:neon-glow transition-all flex items-center gap-2 group">
                   <Zap size={18} className="fill-background" />
-                  DISCOVER NOW
+                  DISCOVER CREATORS
                 </button>
               </div>
             </div>
@@ -111,7 +114,7 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <TrendingUp className="text-accent" size={24} />
               <h2 className="text-xl font-headline font-bold">
-                {selectedCategory === "All" ? "Hot on AlgoTube" : `${selectedCategory} Transmissions`}
+                {selectedCategory === "All" ? "Hot on AlgoTube" : `${selectedCategory} Videos`}
               </h2>
             </div>
           </div>
