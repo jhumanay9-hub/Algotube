@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "UserProfile": {
@@ -47,14 +48,14 @@
         },
         "subscribedChannelIds": {
           "type": "array",
-          "description": "References to UserProfile IDs of channels this user has subscribed to. (Relationship: UserProfile N:N UserProfile)",
+          "description": "References to UserProfile IDs of channels this user has subscribed to.",
           "items": {
             "type": "string"
           }
         },
         "subscriberIds": {
           "type": "array",
-          "description": "References to UserProfile IDs of users who have subscribed to this user's channel. (Relationship: UserProfile N:N UserProfile)",
+          "description": "References to UserProfile IDs of users who have subscribed to this user's channel.",
           "items": {
             "type": "string"
           }
@@ -85,6 +86,10 @@
           "type": "string",
           "description": "A detailed description of the video content."
         },
+        "aiSummary": {
+          "type": "string",
+          "description": "A 2-sentence AI-generated summary of the video content."
+        },
         "thumbnailUrl": {
           "type": "string",
           "description": "URL to the video's thumbnail image.",
@@ -110,7 +115,7 @@
         },
         "uploaderId": {
           "type": "string",
-          "description": "Reference to the UserProfile ID of the user who uploaded this video. (Relationship: UserProfile 1:N Video)"
+          "description": "Reference to the UserProfile ID of the user who uploaded this video."
         },
         "tags": {
           "type": "array",
@@ -121,7 +126,7 @@
         },
         "category": {
           "type": "string",
-          "description": "The primary category or genre of the video (e.g., 'Tech', 'Gaming', 'Music')."
+          "description": "The primary category or genre of the video."
         },
         "likesCount": {
           "type": "number",
@@ -133,18 +138,15 @@
         },
         "commentsCount": {
           "type": "number",
-          "description": "The total number of comments on the video. (Aggregate for display)"
+          "description": "The total number of comments on the video."
         },
         "processingStatus": {
           "type": "string",
-          "description": "The current processing status of the video (e.g., 'uploaded', 'processing', 'ready', 'failed'). Updated by Cloud Functions."
+          "description": "The current processing status of the video (e.g., 'uploaded', 'processing', 'ready', 'failed')."
         },
-        "searchIndexTerms": {
-          "type": "array",
-          "description": "Extracted keywords and metadata used to build the Trie (Prefix Tree) for type-ahead search suggestions.",
-          "items": {
-            "type": "string"
-          }
+        "safetyFlag": {
+          "type": "boolean",
+          "description": "Indicates if the content has been flagged by AI safety filters."
         }
       },
       "required": [
@@ -154,157 +156,6 @@
         "uploadDate",
         "uploaderId",
         "processingStatus"
-      ]
-    },
-    "Comment": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Comment",
-      "type": "object",
-      "description": "Represents a user's comment on a video, including replies to other comments.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Comment entity."
-        },
-        "videoId": {
-          "type": "string",
-          "description": "Reference to the Video ID this comment belongs to. (Relationship: Video 1:N Comment)"
-        },
-        "userId": {
-          "type": "string",
-          "description": "Reference to the UserProfile ID of the user who posted this comment. (Relationship: UserProfile 1:N Comment)"
-        },
-        "content": {
-          "type": "string",
-          "description": "The text content of the comment."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when the comment was posted.",
-          "format": "date-time"
-        },
-        "parentCommentId": {
-          "type": "string",
-          "description": "Optional reference to the ID of the parent comment, indicating this is a reply. (Relationship: Comment 1:N Comment)"
-        },
-        "likesCount": {
-          "type": "number",
-          "description": "The number of likes this comment has received."
-        },
-        "dislikesCount": {
-          "type": "number",
-          "description": "The number of dislikes this comment has received."
-        }
-      },
-      "required": [
-        "id",
-        "videoId",
-        "userId",
-        "content",
-        "createdAt"
-      ]
-    },
-    "UserVideoInteraction": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "UserVideoInteraction",
-      "type": "object",
-      "description": "Tracks specific interactions a user has with a video, crucial for the recommendation engine and analytics.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the UserVideoInteraction entity."
-        },
-        "userId": {
-          "type": "string",
-          "description": "Reference to the UserProfile ID of the user involved in the interaction. (Relationship: UserProfile 1:N UserVideoInteraction)"
-        },
-        "videoId": {
-          "type": "string",
-          "description": "Reference to the Video ID that was interacted with. (Relationship: Video 1:N UserVideoInteraction)"
-        },
-        "interactionType": {
-          "type": "string",
-          "description": "The type of interaction (e.g., 'view', 'like', 'dislike', 'share', 'add_to_playlist', 'watched_full', 'watched_partial')."
-        },
-        "timestamp": {
-          "type": "string",
-          "description": "Timestamp when the interaction occurred.",
-          "format": "date-time"
-        },
-        "watchDurationSeconds": {
-          "type": "number",
-          "description": "Optional: The duration in seconds the user watched the video during this interaction. Relevant for 'view' or 'watched_partial' types."
-        },
-        "percentageWatched": {
-          "type": "number",
-          "description": "Optional: The percentage of the video watched by the user during this interaction (0-100). Relevant for 'view' or 'watched_partial' types."
-        },
-        "tagsAtInteraction": {
-          "type": "array",
-          "description": "Optional: A snapshot of relevant video tags or user interests at the time of interaction, used for the recommendation engine.",
-          "items": {
-            "type": "string"
-          }
-        }
-      },
-      "required": [
-        "id",
-        "userId",
-        "videoId",
-        "interactionType",
-        "timestamp"
-      ]
-    },
-    "Playlist": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Playlist",
-      "type": "object",
-      "description": "Represents a collection of videos curated by a user, which can be public or private.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Playlist entity."
-        },
-        "title": {
-          "type": "string",
-          "description": "The title of the playlist."
-        },
-        "description": {
-          "type": "string",
-          "description": "A description of the playlist content."
-        },
-        "ownerId": {
-          "type": "string",
-          "description": "Reference to the UserProfile ID of the user who owns this playlist. (Relationship: UserProfile 1:N Playlist)"
-        },
-        "videoIds": {
-          "type": "array",
-          "description": "References to Video IDs included in this playlist. (Relationship: Video N:N Playlist)",
-          "items": {
-            "type": "string"
-          }
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when the playlist was created.",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "description": "Timestamp when the playlist was last updated.",
-          "format": "date-time"
-        },
-        "isPublic": {
-          "type": "boolean",
-          "description": "Indicates if the playlist is publicly viewable (true) or private (false)."
-        }
-      },
-      "required": [
-        "id",
-        "title",
-        "ownerId",
-        "createdAt",
-        "isPublic"
       ]
     }
   },
@@ -323,13 +174,7 @@
           "schema": {
             "$ref": "#/backend/entities/UserProfile"
           },
-          "description": "Primary storage for user profiles, uniquely identified by Firebase Auth UID. Secure by path-based ownership, where '{userId}' matches 'request.auth.uid'.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user, matching Firebase Authentication UID."
-            }
-          ]
+          "description": "Primary storage for user profiles."
         }
       },
       {
@@ -339,92 +184,9 @@
           "schema": {
             "$ref": "#/backend/entities/Video"
           },
-          "description": "Stores all publicly viewable videos. Includes denormalized 'uploaderId' field for authorization independence, allowing owner-only write operations while being publicly readable. Supports global listing and search queries.",
-          "params": [
-            {
-              "name": "videoId",
-              "description": "The unique identifier of the video."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/videos/{videoId}/comments/{commentId}",
-        "definition": {
-          "entityName": "Comment",
-          "schema": {
-            "$ref": "#/backend/entities/Comment"
-          },
-          "description": "Stores comments associated with a specific video. Includes denormalized 'userId' (of the commenter) for authorization independence, allowing owner-only write operations while being publicly readable.",
-          "params": [
-            {
-              "name": "videoId",
-              "description": "The unique identifier of the parent video."
-            },
-            {
-              "name": "commentId",
-              "description": "The unique identifier of the comment."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/userProfiles/{userId}/videoInteractions/{interactionId}",
-        "definition": {
-          "entityName": "UserVideoInteraction",
-          "schema": {
-            "$ref": "#/backend/entities/UserVideoInteraction"
-          },
-          "description": "Tracks private interactions of a specific user with videos (e.g., views, likes, shares). Secured by path-based ownership, with '{userId}' matching 'request.auth.uid'. The document also contains 'userId' for data consistency.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user performing the interaction, matching Firebase Authentication UID."
-            },
-            {
-              "name": "interactionId",
-              "description": "The unique identifier of the user video interaction record."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/playlists_public/{playlistId}",
-        "definition": {
-          "entityName": "Playlist",
-          "schema": {
-            "$ref": "#/backend/entities/Playlist"
-          },
-          "description": "Dedicated top-level collection for playlists marked as 'isPublic: true'. Includes denormalized 'ownerId' for authorization independence, allowing owner-only write operations while being publicly readable. Enables efficient global listing of public playlists.",
-          "params": [
-            {
-              "name": "playlistId",
-              "description": "The unique identifier of the public playlist."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/userProfiles/{userId}/playlists_private/{playlistId}",
-        "definition": {
-          "entityName": "Playlist",
-          "schema": {
-            "$ref": "#/backend/entities/Playlist"
-          },
-          "description": "Stores private playlists belonging to a specific user (where 'isPublic: false'). Secured by path-based ownership, with '{userId}' matching 'request.auth.uid'. Includes denormalized 'ownerId' for explicit rule clarity.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the playlist owner, matching Firebase Authentication UID."
-            },
-            {
-              "name": "playlistId",
-              "description": "The unique identifier of the private playlist."
-            }
-          ]
+          "description": "Stores all publicly viewable videos."
         }
       }
-    ],
-    "reasoning": "The AlgoTube Firestore structure is designed for security, scalability, and debuggability, adhering strictly to the core design principles. \n\n**Authorization Independence via Denormalization:**\n\n1.  **UserProfile (`/userProfiles/{userId}`):** User profiles are uniquely identified by their Firebase `auth.uid`. The `userId` wildcard in the path directly corresponds to `request.auth.uid`, establishing clear, path-based ownership. No additional `get()` operations are required for authorizing access to a user's own profile, ensuring atomic operations and simplifying rules. The `UserProfile` document itself is the authorization context.\n2.  **Video (`/videos/{videoId}`):** Each `Video` document includes a denormalized `uploaderId` field. This allows security rules to directly check `resource.data.uploaderId == request.auth.uid` for write operations (create, update, delete) without needing to fetch any parent document. Read access is public.\n3.  **Comment (`/videos/{videoId}/comments/{commentId}`):** Each `Comment` document includes a denormalized `userId` field, representing the commenter. This enables direct ownership checks (`resource.data.userId == request.auth.uid`) for modifying a comment, eliminating `get()` calls. Read access is public.\n4.  **UserVideoInteraction (`/userProfiles/{userId}/videoInteractions/{interactionId}`):** These interactions are private to the user. The `userId` in the path segment immediately secures these documents by linking them to `request.auth.uid`. The `UserVideoInteraction` document also includes `userId` for data integrity and explicit context, but authorization is primarily path-based.\n5.  **Playlist (Segregated):** Playlists are segregated into two collections based on their privacy: \n    *   **Public Playlists (`/playlists_public/{playlistId}`):** Each document includes a denormalized `ownerId`. This allows security rules to check `resource.data.ownerId == request.auth.uid` for write operations without `get()`. Read access is public.\n    *   **Private Playlists (`/userProfiles/{userId}/playlists_private/{playlistId}`):** These are secured by the `userId` in the path, ensuring only the owning user can access them. The `ownerId` is also denormalized within the document for explicit context, allowing direct `resource.data.ownerId == request.auth.uid` checks.\n\nThis extensive denormalization and path-based ownership strategy ensures that authorization decisions are always self-contained within the document being accessed or its immediate path, completely eliminating the need for expensive and complex `get()` calls in Firestore Security Rules. This makes rules atomic, performant, and significantly easier to debug.\n\n**Support for QAPs (Queryable Authorization Patterns):**\n\n1.  **Structural Segregation:** The design strategically segregates data based on its security posture:\n    *   **Public Read, Owner Write:** `/videos/{videoId}` and `/playlists_public/{playlistId}`. These top-level collections enable efficient global `list` queries for public content (e.g., trending videos, search results, public playlists) because all documents within them share the same public read access requirements. Rules don't need to filter results; they simply grant public read access to the entire collection.\n    *   **Owner Read/Write (Path-Based):** `/userProfiles/{userId}`, `/userProfiles/{userId}/videoInteractions/{interactionId}`, and `/userProfiles/{userId}/playlists_private/{playlistId}`. These collections inherently support QAPs for user-specific data. A user can efficiently `list` their own profiles, interactions, or private playlists because the `userId` in the path segment ensures all documents within that subcollection belong to `request.auth.uid`. The rules simply enforce `request.auth.uid == userId` for all operations within these paths, making queries secure and efficient without requiring rule-based filtering.\n    *   **Public Read, Commenter Write:** `/videos/{videoId}/comments/{commentId}`. This subcollection allows efficient listing of comments for a specific video, as all documents are publicly readable. Write access is restricted to the `userId` denormalized within each comment.\n\nBy carefully segregating data into collections with homogeneous security postures and denormalizing authorization-critical fields, the design ensures that Firestore Security Rules act as robust gates rather than filters, allowing for secure and efficient `list` operations without compromising performance or introducing complexity."
+    ]
   }
 }

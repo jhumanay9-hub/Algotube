@@ -7,26 +7,25 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, X, Loader2, Video as VideoIcon, Music, FileVideo, CheckCircle2 } from 'lucide-react';
+import { Upload, X, Loader2, Video as VideoIcon, Music, FileVideo, CheckCircle2, Sparkles, ShieldAlert } from 'lucide-react';
 import { useFirestore, useUser, useStorage } from '@/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { useToast } from '@/hooks/use-toast';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
+import { analyzeVideoContent } from '@/ai/flows/analyze-video-content-flow';
 
 interface UploadModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const CircularProgress = ({ progress }: { progress: number }) => {
+const CircularProgress = ({ progress, label }: { progress: number, label?: string }) => {
   const radius = 36;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (progress / 100) * circumference;
 
   return (
-    <div className="relative inline-flex items-center justify-center">
+    <div className="relative inline-flex flex-col items-center justify-center">
       <svg className="w-24 h-24 transform -rotate-90">
         <circle
           className="text-white/10"
@@ -51,12 +50,14 @@ const CircularProgress = ({ progress }: { progress: number }) => {
         />
       </svg>
       <span className="absolute text-xs font-code font-bold text-accent">{Math.round(progress)}%</span>
+      {label && <p className="text-[10px] text-muted-foreground font-code mt-4 uppercase tracking-widest">{label}</p>}
     </div>
   );
 };
 
 export function UploadModal({ isOpen, onClose }: UploadModalProps) {
   const [isUploading, setIsUploading] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -104,7 +105,6 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
         setUploadProgress(progress);
       },
       (error) => {
-        console.error("Upload error:", error);
         setIsUploading(false);
         toast({
           variant: "destructive",
@@ -113,46 +113,61 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
         });
       },
       async () => {
-        const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+        setIsUploading(false);
+        setIsAnalyzing(true);
         
-        const videoData = {
-          title,
-          description,
-          videoUrl: downloadUrl,
-          thumbnailUrl: `https://picsum.photos/seed/${Math.random()}/640/360`,
-          uploaderId: user.uid,
-          uploadDate: serverTimestamp(),
-          viewsCount: 0,
-          likesCount: 0,
-          dislikesCount: 0,
-          commentsCount: 0,
-          shareCount: 0,
-          processingStatus: 'ready',
-          category,
-          mediaType: selectedFile.type,
-          tags: title.split(' ').map(w => w.toLowerCase()).filter(w => w.length > 3),
-        };
-
         try {
+          // AI ANALYSIS PHASE
+          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+          const aiResult = await analyzeVideoContent({ title, description });
+
+          if (!aiResult.isSafe) {
+            toast({
+              variant: "destructive",
+              title: "Content Flagged",
+              description: `Community safety violation detected: ${aiResult.safetyReason || 'Inappropriate content'}`,
+            });
+            setIsAnalyzing(false);
+            return;
+          }
+
+          const videoData = {
+            title,
+            description,
+            aiSummary: aiResult.summary,
+            videoUrl: downloadUrl,
+            thumbnailUrl: `https://picsum.photos/seed/${Math.random()}/640/360`,
+            uploaderId: user.uid,
+            uploadDate: serverTimestamp(),
+            viewsCount: 0,
+            likesCount: 0,
+            dislikesCount: 0,
+            commentsCount: 0,
+            shareCount: 0,
+            processingStatus: 'ready',
+            category,
+            mediaType: selectedFile.type,
+            tags: aiResult.seoTags,
+            safetyFlag: false,
+          };
+
           await addDoc(collection(firestore, 'videos'), videoData);
           toast({
             title: "Content Published!",
-            description: "Your media is now live on the mesh.",
+            description: "AI analysis complete. Your media is live.",
           });
           onClose();
           setTitle('');
           setDescription('');
           setSelectedFile(null);
-          setUploadProgress(0);
         } catch (error: any) {
-          const contextualError = new FirestorePermissionError({
-            operation: 'create',
-            path: 'videos',
-            requestResourceData: videoData,
+          toast({
+            variant: "destructive",
+            title: "Processing Error",
+            description: "Failed to finalize media processing.",
           });
-          errorEmitter.emit('permission-error', contextualError);
         } finally {
-          setIsUploading(false);
+          setIsAnalyzing(false);
         }
       }
     );
@@ -170,17 +185,18 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
           </DialogDescription>
         </DialogHeader>
 
-        {isUploading ? (
+        {isUploading || isAnalyzing ? (
           <div className="flex flex-col items-center justify-center py-12 gap-6">
-            <CircularProgress progress={uploadProgress} />
-            <div className="text-center">
-              <h3 className="text-lg font-headline font-bold text-accent animate-pulse">
-                UPLOADING TO MESH
-              </h3>
-              <p className="text-xs text-muted-foreground font-code mt-1">
-                {selectedFile?.name}
-              </p>
-            </div>
+            <CircularProgress 
+              progress={isUploading ? uploadProgress : 100} 
+              label={isUploading ? "Uploading to mesh..." : "AI is analyzing your video..."} 
+            />
+            {isAnalyzing && (
+              <div className="flex flex-col items-center gap-2 animate-pulse">
+                <Sparkles size={20} className="text-accent" />
+                <p className="text-[10px] text-accent font-code font-bold">OPTIMIZING SEO & SAFETY</p>
+              </div>
+            )}
           </div>
         ) : (
           <form onSubmit={handleUpload} className="space-y-4 mt-4">
@@ -243,7 +259,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
             <div className="space-y-2">
               <Label>Category</Label>
               <select 
-                className="flex h-10 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
+                className="flex h-10 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 appearance-none"
                 value={category}
                 onChange={e => setCategory(e.target.value)}
               >
