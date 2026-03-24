@@ -22,7 +22,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function VideoDetailPage() {
   const { id } = useParams();
-  const { firestore, auth } = useFirebase();
+  const { firestore } = useFirebase();
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
@@ -88,10 +88,9 @@ export default function VideoDetailPage() {
       return;
     }
 
-    if (!firestore || !id) return;
+    if (!firestore || !id || !videoRef) return;
 
     const interactionRef = doc(firestore, 'userProfiles', user.uid, 'videoInteractions', `${id}_${type}`);
-    const videoRef = doc(firestore, 'videos', id as string);
 
     try {
       await runTransaction(firestore, async (transaction) => {
@@ -100,15 +99,38 @@ export default function VideoDetailPage() {
           return Promise.reject("ALREADY_INTERACTED");
         }
 
+        const videoDoc = await transaction.get(videoRef);
+        if (!videoDoc.exists()) {
+          // Lazy Hydration: Create Firestore document for mock video if missing
+          transaction.set(videoRef, {
+            id: id,
+            title: displayVideo.title,
+            description: (displayVideo as any).description || displayVideo.title,
+            videoUrl: (displayVideo as any).videoUrl || "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+            thumbnailUrl: (displayVideo as any).thumbnailUrl || displayVideo.thumbnail,
+            uploaderId: (displayVideo as any).uploaderId || "system_mock",
+            uploadDate: serverTimestamp(),
+            viewsCount: (displayVideo as any).viewsCount || displayVideo.views,
+            likesCount: type === 'like' ? 1 : 0,
+            dislikesCount: type === 'dislike' ? 1 : 0,
+            commentsCount: 0,
+            shareCount: 0,
+            processingStatus: 'ready',
+            category: (displayVideo as any).category || "General",
+            tags: displayVideo.tags,
+            creator: displayVideo.creator
+          });
+        } else {
+          transaction.update(videoRef, {
+            [type === 'like' ? 'likesCount' : 'dislikesCount']: increment(1)
+          });
+        }
+
         transaction.set(interactionRef, {
           userId: user.uid,
           videoId: id,
           interactionType: type,
           timestamp: serverTimestamp()
-        });
-
-        transaction.update(videoRef, {
-          [type === 'like' ? 'likesCount' : 'dislikesCount']: increment(1)
         });
       });
       
@@ -133,7 +155,6 @@ export default function VideoDetailPage() {
     console.log('Action attempted by:', user?.email || 'Anonymous');
 
     if (!user) {
-      // Dispatch custom event to trigger Navbar glow
       window.dispatchEvent(new CustomEvent('auth-required-glow'));
       toast({ 
         variant: "destructive",
@@ -143,9 +164,10 @@ export default function VideoDetailPage() {
       return;
     }
 
-    if (!firestore || !video?.uploaderId) return;
+    const creatorId = video?.uploaderId || (displayVideo as any).uploaderId || "system_mock";
+    if (!firestore || !creatorId) return;
 
-    await toggleSubscription(firestore, user.uid, video.uploaderId, isSubscribed);
+    await toggleSubscription(firestore, user.uid, creatorId, isSubscribed);
     
     toast({
       title: isSubscribed ? "Unsubscribed" : "Subscribed",
@@ -154,13 +176,12 @@ export default function VideoDetailPage() {
   };
 
   const handleShare = async () => {
-    if (!firestore || !id) return;
+    if (!firestore || !id || !videoRef) return;
     
     const shareUrl = window.location.href;
     await navigator.clipboard.writeText(shareUrl);
     
-    const videoDocRef = doc(firestore, 'videos', id as string);
-    setDoc(videoDocRef, { shareCount: increment(1) }, { merge: true });
+    setDoc(videoRef, { shareCount: increment(1) }, { merge: true });
 
     toast({
       title: "URL Copied",
@@ -172,7 +193,7 @@ export default function VideoDetailPage() {
     <div className="flex flex-col h-screen overflow-hidden relative">
       <Navbar />
 
-      {/* Global Loading Spinner for Auth State */}
+      {/* Global Loading Spinner for Auth State Persistence */}
       {isUserLoading && (
         <div className="absolute inset-0 z-[100] bg-background/50 backdrop-blur-md flex flex-col items-center justify-center gap-4">
           <div className="w-16 h-16 border-4 border-accent/20 border-t-accent rounded-full animate-spin shadow-[0_0_20px_rgba(116,222,236,0.2)]" />
@@ -185,7 +206,7 @@ export default function VideoDetailPage() {
 
         <main className="flex-1 overflow-y-auto p-4 pt-0 custom-scrollbar flex gap-4">
           <div className="flex-1 flex flex-col gap-6">
-            <CanvasVideoPlayer src={displayVideo.videoUrl || "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"} />
+            <CanvasVideoPlayer src={(displayVideo as any).videoUrl || "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"} />
             
             <div className="glass-panel rounded-2xl p-6 relative">
               <div className="absolute top-6 right-6 flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-[10px] text-accent font-code">
@@ -225,7 +246,7 @@ export default function VideoDetailPage() {
                       disabled={isUserLoading}
                       className="rounded-l-lg hover:bg-accent/10 hover:text-accent gap-2 px-4 h-9 group/btn transition-all"
                     >
-                      <ThumbsUp size={16} className="group-hover/btn:scale-110" /> {displayVideo.likesCount || 0}
+                      <ThumbsUp size={16} className="group-hover/btn:scale-110" /> {(displayVideo as any).likesCount || 0}
                     </Button>
                     <div className="w-px h-6 bg-white/10" />
                     <Button 
@@ -250,19 +271,19 @@ export default function VideoDetailPage() {
               <div className="bg-white/5 rounded-xl p-5 font-body text-sm text-foreground/80 leading-relaxed border border-white/5">
                 <div className="flex gap-4 mb-4 font-bold text-foreground items-center">
                   <span className="flex items-center gap-1.5 text-accent bg-accent/5 px-2 py-1 rounded-md border border-accent/10">
-                    <Eye size={14}/> {displayVideo.viewsCount || 0} views
+                    <Eye size={14}/> {(displayVideo as any).viewsCount || displayVideo.views} views
                   </span>
-                  <span className="text-muted-foreground text-xs">{displayVideo.uploadDate ? new Date(displayVideo.uploadDate.seconds * 1000).toLocaleDateString() : "Syncing..."}</span>
+                  <span className="text-muted-foreground text-xs">{(displayVideo as any).uploadDate ? new Date((displayVideo as any).uploadDate.seconds * 1000).toLocaleDateString() : "Live Archive"}</span>
                 </div>
                 
-                {displayVideo.aiSummary && (
+                {(displayVideo as any).aiSummary && (
                   <div className="mb-4 p-3 rounded-lg bg-accent/5 border-l-2 border-accent italic text-xs">
                     <Sparkles size={12} className="inline mr-2 text-accent" />
-                    {displayVideo.aiSummary}
+                    {(displayVideo as any).aiSummary}
                   </div>
                 )}
                 
-                <p className="mb-4">{displayVideo.description || "No transmission description available."}</p>
+                <p className="mb-4">{(displayVideo as any).description || "No transmission description available."}</p>
                 
                 <div className="mt-4 flex flex-wrap gap-2">
                   {displayVideo.tags?.map(t => (

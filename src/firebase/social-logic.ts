@@ -20,6 +20,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 
 /**
  * Toggles a subscription between a user and a creator using a transaction.
+ * Handles lazy hydration of creator profiles.
  */
 export async function toggleSubscription(db: Firestore, userId: string, creatorId: string, isSubscribed: boolean) {
   const subRef = doc(db, 'userProfiles', userId, 'subscriptions', creatorId);
@@ -27,17 +28,35 @@ export async function toggleSubscription(db: Firestore, userId: string, creatorI
 
   try {
     await runTransaction(db, async (transaction) => {
+      const creatorDoc = await transaction.get(creatorRef);
+      
       if (isSubscribed) {
         // Unsubscribe
         transaction.delete(subRef);
-        transaction.update(creatorRef, { subscriberCount: increment(-1) });
+        if (creatorDoc.exists()) {
+          transaction.update(creatorRef, { subscriberCount: increment(-1) });
+        }
       } else {
         // Subscribe
         transaction.set(subRef, {
           creatorId,
           subscribedAt: serverTimestamp()
         });
-        transaction.update(creatorRef, { subscriberCount: increment(1) });
+
+        if (creatorDoc.exists()) {
+          transaction.update(creatorRef, { subscriberCount: increment(1) });
+        } else {
+          // Lazy Hydration: Create profile metadata for mock creator
+          transaction.set(creatorRef, {
+            id: creatorId,
+            username: `creator_${creatorId.slice(0, 5)}`,
+            email: `${creatorId}@example.com`,
+            joinedAt: serverTimestamp(),
+            subscriberCount: 1,
+            role: 'creator',
+            interests: ['tech', 'vlogs']
+          });
+        }
       }
     });
   } catch (e: any) {
