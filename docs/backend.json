@@ -131,6 +131,19 @@
           "items": {
             "type": "string"
           }
+        },
+        "category": {
+          "type": "string",
+          "description": "Content category (e.g., 'Cybersecurity', 'Social Life')."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duration of the media in seconds."
+        },
+        "aspectRatio": {
+          "type": "string",
+          "description": "Aspect ratio of the media ('16:9' or '9:16').",
+          "enum": ["16:9", "9:16"]
         }
       },
       "required": [

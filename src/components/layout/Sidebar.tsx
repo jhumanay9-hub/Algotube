@@ -2,7 +2,7 @@
 "use client";
 
 import React from 'react';
-import { Home, TrendingUp, Users, Clock, ThumbsUp, Layers, Settings, HelpCircle, LogIn, LogOut } from 'lucide-react';
+import { Home, TrendingUp, Users, Clock, ThumbsUp, Layers, Settings, HelpCircle, LogIn, LogOut, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useUser, useAuth } from '@/firebase';
@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 const MENU_ITEMS = [
   { icon: Home, label: 'Home', href: '/' },
   { icon: TrendingUp, label: 'Trending', href: '/trending' },
+  { icon: Zap, label: 'Shorts', href: '/shorts', className: 'text-red-500 hover:text-red-400 group-hover:neon-red shadow-[0_0_10px_rgba(239,68,68,0.2)]' },
   { icon: Layers, label: 'Subscribed', href: '/subscriptions' },
 ];
 
@@ -41,7 +42,7 @@ export default function Sidebar() {
           : 'text-muted-foreground hover:bg-white/5 hover:text-foreground',
         className
       )}>
-        <Icon size={20} className={isActive ? 'text-accent' : 'group-hover:text-accent transition-colors'} />
+        <Icon size={20} className={cn(isActive ? 'text-accent' : 'group-hover:text-accent transition-colors', label === 'Shorts' && 'text-red-500')} />
         <span className="font-body font-medium">{label}</span>
       </div>
     );
@@ -58,7 +59,7 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="w-64 glass-panel m-4 mt-0 rounded-2xl p-4 flex flex-col gap-8">
+    <aside className="w-64 glass-panel m-4 mt-0 rounded-2xl p-4 flex flex-col gap-8 hidden lg:flex">
       <div>
         <h3 className="text-xs font-headline font-semibold text-muted-foreground uppercase tracking-widest mb-4 px-4">Menu</h3>
         <div className="space-y-1">
@@ -102,10 +103,15 @@ export default function Sidebar() {
         <div className="mt-6 p-4 rounded-xl bg-gradient-to-br from-primary/20 to-accent/5 border border-white/5">
           <p className="text-xs text-muted-foreground leading-relaxed">
             AlgoTube v1.0.42<br/>
-            Security Level: <span className="text-accent">ENCRYPTED</span>
+            Mesh Status: <span className="text-accent">ONLINE</span>
           </p>
         </div>
       </div>
+      <style jsx global>{`
+        .neon-red {
+          text-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+        }
+      `}</style>
     </aside>
   );
 }

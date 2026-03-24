@@ -131,6 +131,10 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
             return;
           }
 
+          // Aspect Ratio Logic: Default 16:9 for large files, 9:16 for smaller portrait files
+          // In a real app we'd use a metadata library to get actual dims
+          const aspectRatio = (selectedFile.size < 50 * 1024 * 1024) ? "9:16" : "16:9";
+
           const videoData = {
             title,
             description,
@@ -149,6 +153,8 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
             mediaType: selectedFile.type,
             tags: aiResult.seoTags,
             safetyFlag: false,
+            duration: 15, // Mocked
+            aspectRatio: aspectRatio,
           };
 
           await addDoc(collection(firestore, 'videos'), videoData);
@@ -263,11 +269,9 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
                 value={category}
                 onChange={e => setCategory(e.target.value)}
               >
-                <option value="Tech">Tech</option>
-                <option value="Entertainment">Entertainment</option>
-                <option value="Education">Education</option>
-                <option value="Gaming">Gaming</option>
-                <option value="Music">Music</option>
+                {["Cybersecurity", "Social Life", "Computer Science", "Physics", "Tech", "Entertainment"].map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
               </select>
             </div>
 
