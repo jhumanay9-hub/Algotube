@@ -42,7 +42,9 @@
         "tags": { "type": "array", "items": { "type": "string" } },
         "category": { "type": "string" },
         "duration": { "type": "number" },
-        "aspectRatio": { "type": "string", "enum": ["16:9", "9:16"] }
+        "aspectRatio": { "type": "string", "enum": ["16:9", "9:16"] },
+        "s3Key": { "type": "string" },
+        "s3Bucket": { "type": "string" }
       },
       "required": ["id", "title", "videoUrl", "uploadDate", "uploaderId", "processingStatus"]
     },
