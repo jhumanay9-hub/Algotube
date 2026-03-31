@@ -1,13 +1,13 @@
 
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, Loader2, FileVideo, ShieldAlert, DatabaseZap, AlertCircle, Info } from 'lucide-react';
+import { Upload, Loader2, FileVideo, ShieldAlert, DatabaseZap, AlertCircle, Info, Zap } from 'lucide-react';
 import { useUser } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { analyzeVideoContent } from '@/ai/flows/analyze-video-content-flow';
@@ -19,20 +19,26 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 interface UploadModalProps {
   isOpen: boolean;
   onClose: () => void;
+  forcedCategory?: string;
 }
 
-export function UploadModal({ isOpen, onClose }: UploadModalProps) {
+export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('Social Media');
+  const [category, setCategory] = useState(forcedCategory || 'Social Media');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   
   const { user } = useUser();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync category if forced (e.g., from Shorts page)
+  useEffect(() => {
+    if (forcedCategory) setCategory(forcedCategory);
+  }, [forcedCategory, isOpen]);
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,6 +95,10 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
       await uploadPromise;
 
       // Phase 3: Metadata Persistence in B2 Registry
+      const isShort = category === 'Shorts' || forcedCategory === 'Shorts';
+      const tags = [...aiResult.seoTags];
+      if (isShort && !tags.includes('short')) tags.push('short');
+
       const videoData = {
         id: fileName,
         title,
@@ -103,16 +113,22 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
         commentsCount: 0,
         category,
         creator: user.displayName || "Explorer",
-        tags: aiResult.seoTags,
+        tags,
         s3Key: fileName,
-        s3Bucket: uploadAuth.bucket
+        s3Bucket: uploadAuth.bucket,
+        aspectRatio: isShort ? '9:16' : '16:9'
       };
 
       await registerB2Video(videoData);
 
-      toast({ title: "Broadcast Successful", description: "Transmission persisted to the B2 mesh." });
+      toast({ title: "Broadcast Successful", description: `Transmission persisted to the B2 mesh as ${isShort ? 'a Short' : 'a Video'}.` });
       onClose();
       setIsProcessing(false);
+      
+      // Reset form
+      setTitle('');
+      setDescription('');
+      setSelectedFile(null);
     } catch (error: any) {
       console.error('B2 Upload Mesh Failure:', error);
       const errorMessage = error?.message || "An unexpected error occurred during the transmission.";
@@ -129,7 +145,15 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
         <div className="p-8 max-h-[90vh] overflow-y-auto custom-scrollbar">
           <DialogHeader className="mb-6">
             <DialogTitle className="text-2xl font-headline font-bold flex items-center gap-2">
-              <Upload className="text-accent" /> B2 Mesh Transmission
+              {forcedCategory === 'Shorts' ? (
+                <>
+                  <Zap className="text-red-500 fill-red-500" /> B2 Short Broadcast
+                </>
+              ) : (
+                <>
+                  <Upload className="text-accent" /> B2 Mesh Transmission
+                </>
+              )}
             </DialogTitle>
           </DialogHeader>
 
@@ -160,14 +184,25 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
 
           {isProcessing ? (
             <div className="flex flex-col items-center justify-center py-12 gap-6 text-center">
-              <div className="w-24 h-24 border-4 border-accent/20 border-t-accent rounded-full animate-spin" />
+              <div className={cn(
+                "w-24 h-24 border-4 rounded-full animate-spin",
+                forcedCategory === 'Shorts' ? "border-red-500/20 border-t-red-500" : "border-accent/20 border-t-accent"
+              )} />
               <div className="space-y-2">
-                <p className="font-code text-accent text-sm font-bold uppercase tracking-widest animate-pulse">
+                <p className={cn(
+                  "font-code text-sm font-bold uppercase tracking-widest animate-pulse",
+                  forcedCategory === 'Shorts' ? "text-red-500" : "text-accent"
+                )}>
                   Broadcasting: {Math.round(uploadProgress)}%
                 </p>
-                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-accent/5 border border-accent/10">
-                  <DatabaseZap size={14} className="text-accent" />
-                  <span className="text-[10px] text-accent font-code">SYNCING WITH BACKBLAZE B2</span>
+                <div className={cn(
+                  "flex items-center gap-2 px-3 py-1 rounded-full border",
+                  forcedCategory === 'Shorts' ? "bg-red-500/5 border-red-500/10" : "bg-accent/5 border-accent/10"
+                )}>
+                  <DatabaseZap size={14} className={forcedCategory === 'Shorts' ? "text-red-500" : "text-accent"} />
+                  <span className={cn("text-[10px] font-code", forcedCategory === 'Shorts' ? "text-red-500" : "text-accent")}>
+                    SYNCING WITH B2 CLOUD MESH
+                  </span>
                 </div>
               </div>
             </div>
@@ -176,8 +211,10 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
               <div 
                 onClick={() => fileInputRef.current?.click()} 
                 className={cn(
-                  "border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all",
-                  selectedFile ? "border-accent/40 bg-accent/5" : "border-white/10 hover:border-accent/40"
+                  "border-2 border-dashed rounded-2xl p-12 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all",
+                  selectedFile 
+                    ? (forcedCategory === 'Shorts' ? "border-red-500/40 bg-red-500/5" : "border-accent/40 bg-accent/5") 
+                    : "border-white/10 hover:border-accent/40"
                 )}
               >
                 <input 
@@ -189,14 +226,19 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
                 />
                 {selectedFile ? (
                   <div className="flex flex-col items-center gap-2 text-center">
-                    <FileVideo size={32} className="text-accent" />
-                    <span className="font-code text-xs font-bold text-accent line-clamp-1">{selectedFile.name}</span>
-                    <span className="text-[10px] opacity-50">{(selectedFile.size / (1024 * 1024)).toFixed(2)} MB</span>
+                    <FileVideo size={48} className={forcedCategory === 'Shorts' ? "text-red-500" : "text-accent"} />
+                    <span className={cn("font-code text-sm font-bold line-clamp-1", forcedCategory === 'Shorts' ? "text-red-500" : "text-accent")}>
+                      {selectedFile.name}
+                    </span>
+                    <span className="text-xs opacity-50">{(selectedFile.size / (1024 * 1024)).toFixed(2)} MB</span>
                   </div>
                 ) : (
                   <>
-                    <Upload size={32} className="text-white/20" />
-                    <p className="text-sm font-bold opacity-50">Select Media Stream</p>
+                    <Upload size={48} className="text-white/20" />
+                    <div className="text-center">
+                      <p className="text-sm font-bold opacity-50">Select Media Stream</p>
+                      <p className="text-[10px] opacity-30 mt-1 uppercase tracking-wider">Vertical (9:16) Recommended</p>
+                    </div>
                   </>
                 )}
               </div>
@@ -207,25 +249,28 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
                   placeholder="Transmission Title" 
                   value={title} 
                   onChange={e => setTitle(e.target.value)} 
-                  className="bg-white/5 border-white/10 focus:border-accent/50" 
+                  className="bg-white/5 border-white/10 focus:border-accent/50 h-12 rounded-xl" 
                   required
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label>Category</Label>
-                <select 
-                  value={category} 
-                  onChange={e => setCategory(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:border-accent/50 outline-none text-foreground appearance-none"
-                >
-                  <option value="Social Media" className="bg-background">Social Media</option>
-                  <option value="Entertainment" className="bg-background">Entertainment</option>
-                  <option value="Computer Science" className="bg-background">Computer Science</option>
-                  <option value="Physics" className="bg-background">Physics</option>
-                  <option value="Cybersecurity" className="bg-background">Cybersecurity</option>
-                </select>
-              </div>
+              {!forcedCategory && (
+                <div className="space-y-2">
+                  <Label>Category</Label>
+                  <select 
+                    value={category} 
+                    onChange={e => setCategory(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-accent/50 outline-none text-foreground appearance-none"
+                  >
+                    <option value="Social Media" className="bg-background">Social Media</option>
+                    <option value="Shorts" className="bg-background">Shorts (9:16)</option>
+                    <option value="Entertainment" className="bg-background">Entertainment</option>
+                    <option value="Computer Science" className="bg-background">Computer Science</option>
+                    <option value="Physics" className="bg-background">Physics</option>
+                    <option value="Cybersecurity" className="bg-background">Cybersecurity</option>
+                  </select>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label>Description</Label>
@@ -233,15 +278,18 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
                   placeholder="Contextual metadata for the community..." 
                   value={description} 
                   onChange={e => setDescription(e.target.value)} 
-                  className="bg-white/5 border-white/10 min-h-[100px] focus:border-accent/50" 
+                  className="bg-white/5 border-white/10 min-h-[100px] focus:border-accent/50 rounded-xl" 
                 />
               </div>
 
               <div className="pt-4 flex justify-end gap-3 sticky bottom-0 bg-transparent py-2">
-                <Button type="button" variant="ghost" onClick={onClose} className="rounded-xl">Abort</Button>
+                <Button type="button" variant="ghost" onClick={onClose} className="rounded-xl px-6">Abort</Button>
                 <Button 
                   type="submit" 
-                  className="bg-accent text-background hover:neon-glow font-bold px-8 rounded-xl" 
+                  className={cn(
+                    "font-bold px-10 h-12 rounded-xl transition-all shadow-lg",
+                    forcedCategory === 'Shorts' ? "bg-red-600 hover:bg-red-500 text-white" : "bg-accent text-background hover:neon-glow"
+                  )} 
                   disabled={!selectedFile || isProcessing || !title}
                 >
                   START BROADCAST
