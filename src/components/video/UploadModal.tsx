@@ -35,7 +35,6 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync category if forced (e.g., from Shorts page)
   useEffect(() => {
     if (forcedCategory) setCategory(forcedCategory);
   }, [forcedCategory, isOpen]);
@@ -67,6 +66,8 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
       const uploadPromise = new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('PUT', uploadAuth.url);
+        
+        // CRITICAL: Content-Type must match the presigned URL signature
         xhr.setRequestHeader('Content-Type', selectedFile.type);
         
         xhr.upload.onprogress = (e) => {
@@ -79,7 +80,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve();
           } else {
-            const errorMsg = `B2 Node rejected stream (Status ${xhr.status}). Check Bucket Permissions.`;
+            const errorMsg = `B2 Node rejected stream (Status ${xhr.status}). Ensure Bucket CORS allows PUT.`;
             reject(new Error(errorMsg));
           }
         };
@@ -121,18 +122,16 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
 
       await registerB2Video(videoData);
 
-      toast({ title: "Broadcast Successful", description: `Transmission persisted to the B2 mesh as ${isShort ? 'a Short' : 'a Video'}.` });
+      toast({ title: "Broadcast Successful", description: `Transmission persisted to the B2 mesh.` });
       onClose();
       setIsProcessing(false);
       
-      // Reset form
       setTitle('');
       setDescription('');
       setSelectedFile(null);
     } catch (error: any) {
       console.error('B2 Upload Mesh Failure:', error);
-      const errorMessage = error?.message || "An unexpected error occurred during the transmission.";
-      setUploadError(errorMessage);
+      setUploadError(error?.message || "An unexpected error occurred during the transmission.");
       setIsProcessing(false);
     }
   };
@@ -164,18 +163,17 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
               <AlertDescription className="text-xs font-body">
                 {uploadError}
                 {isCorsError && (
-                  <div className="mt-4 p-3 bg-black/40 rounded-xl border border-destructive/20 space-y-2">
+                  <div className="mt-4 p-4 bg-black/40 rounded-xl border border-destructive/20 space-y-3">
                     <p className="font-bold flex items-center gap-2 text-white">
                       <ShieldAlert size={14} className="text-red-400" /> Action Required: CORS Config
                     </p>
-                    <p className="opacity-80">Your browser blocked the direct upload to Backblaze. To fix this:</p>
-                    <ol className="list-decimal ml-4 opacity-80 space-y-1">
-                      <li>Log in to <span className="text-accent">Backblaze B2 Console</span></li>
-                      <li>Go to <span className="font-bold">Buckets</span> &gt; <span className="font-bold">CORS Settings</span></li>
-                      <li>Add a rule: <span className="font-code text-[10px] bg-white/10 px-1">Allowed Origins: *</span></li>
-                      <li>Allow Methods: <span className="font-code text-[10px] bg-white/10 px-1">PUT, GET</span></li>
-                      <li>Allow Headers: <span className="font-code text-[10px] bg-white/10 px-1">Content-Type, x-amz-*</span></li>
-                    </ol>
+                    <p className="opacity-80">Your browser blocked the direct upload to Backblaze B2. Please apply this setting in your B2 Console:</p>
+                    <div className="bg-white/5 p-3 rounded-lg font-code text-[10px] space-y-1">
+                      <p><span className="text-accent">Allowed Origins:</span> * (or your domain)</p>
+                      <p><span className="text-accent">Allowed Methods:</span> PUT, GET, POST</p>
+                      <p><span className="text-accent">Allowed Headers:</span> Content-Type, x-amz-*, authorization</p>
+                      <p><span className="text-accent">Expose Headers:</span> ETag</p>
+                    </div>
                   </div>
                 )}
               </AlertDescription>
@@ -201,7 +199,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
                 )}>
                   <DatabaseZap size={14} className={forcedCategory === 'Shorts' ? "text-red-500" : "text-accent"} />
                   <span className={cn("text-[10px] font-code", forcedCategory === 'Shorts' ? "text-red-500" : "text-accent")}>
-                    SYNCING WITH B2 CLOUD MESH
+                    B2 MESH SYNC IN PROGRESS
                   </span>
                 </div>
               </div>
@@ -237,7 +235,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
                     <Upload size={48} className="text-white/20" />
                     <div className="text-center">
                       <p className="text-sm font-bold opacity-50">Select Media Stream</p>
-                      <p className="text-[10px] opacity-30 mt-1 uppercase tracking-wider">Vertical (9:16) Recommended</p>
+                      <p className="text-[10px] opacity-30 mt-1 uppercase tracking-wider">Direct Broadcast to B2</p>
                     </div>
                   </>
                 )}
@@ -282,7 +280,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
                 />
               </div>
 
-              <div className="pt-4 flex justify-end gap-3 sticky bottom-0 bg-transparent py-2">
+              <div className="pt-4 flex justify-end gap-3">
                 <Button type="button" variant="ghost" onClick={onClose} className="rounded-xl px-6">Abort</Button>
                 <Button 
                   type="submit" 
