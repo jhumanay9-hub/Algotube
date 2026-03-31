@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { getLevenshteinDistance } from '@/lib/search-utils';
+import { useState, useEffect } from 'react';
+import { getLevenshteinDistance, generatePrefixes } from '@/lib/search-utils';
 
 export interface SearchResult {
   video: any;
@@ -20,6 +20,7 @@ export function useSearch(query: string, allVideos: any[], debounceMs = 300) {
   useEffect(() => {
     if (!query.trim()) {
       setResults([]);
+      setIsSearching(false);
       return;
     }
 
@@ -27,40 +28,41 @@ export function useSearch(query: string, allVideos: any[], debounceMs = 300) {
     const handler = setTimeout(() => {
       const searchTerm = query.toLowerCase().trim();
       
-      // 1. Prefix Matching (mimics Firestore array-contains on searchKeywords)
+      // 1. Prefix Matching
+      // We check searchKeywords or generate them on the fly for legacy/mock data
       const exactMatches = allVideos.filter(v => {
-        const keywords = v.searchKeywords || [];
-        return keywords.includes(searchTerm);
+        const keywords = v.searchKeywords || generatePrefixes(v.title || "");
+        return keywords.some((k: string) => k.startsWith(searchTerm) || searchTerm.startsWith(k));
       });
 
       let finalResults: SearchResult[] = exactMatches.map(v => ({
         video: v,
-        score: v.views || v.viewsCount || 0,
+        score: (v.views || v.viewsCount || 0) + 1000, // Boost exact matches
         isFuzzy: false
       }));
 
-      // 2. Fuzzy Matching (if prefix yields low results)
-      if (finalResults.length < 5) {
+      // 2. Fuzzy Matching (if exact matches are sparse)
+      if (finalResults.length < 10) {
         const fuzzyResults = allVideos
           .filter(v => !exactMatches.find(em => em.id === v.id))
           .map(v => {
-            const distance = getLevenshteinDistance(searchTerm, v.title.toLowerCase());
+            const distance = getLevenshteinDistance(searchTerm, (v.title || "").toLowerCase());
             return { video: v, distance };
           })
-          .filter(item => item.distance <= 2) // Limit distance to 2
+          .filter(item => item.distance <= 2)
           .map(item => ({
             video: item.video,
-            score: (item.video.views || 0) * (1 / (item.distance + 1)),
+            score: (item.video.views || item.video.viewsCount || 0) * (1 / (item.distance + 1)),
             isFuzzy: true
           }));
         
         finalResults = [...finalResults, ...fuzzyResults];
       }
 
-      // 3. Rank by view count and relevance
+      // 3. Rank by score
       finalResults.sort((a, b) => b.score - a.score);
       
-      setResults(finalResults.slice(0, 20)); // Limit to 20 for performance
+      setResults(finalResults.slice(0, 24)); // Limit for performance
       setIsSearching(false);
     }, debounceMs);
 

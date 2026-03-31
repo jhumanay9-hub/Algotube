@@ -22,7 +22,6 @@ export default function Navbar() {
   const [allVideos, setAllVideos] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const [shouldGlow, setShouldGlow] = useState(false);
 
   const { user } = useUser();
   const auth = useAuth();
@@ -41,6 +40,14 @@ export default function Navbar() {
   const handleLogout = async () => {
     await auth.signOut();
     router.push('/trending');
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+      setShowSuggestions(false);
+    }
   };
 
   return (
@@ -71,7 +78,7 @@ export default function Navbar() {
       </div>
 
       <div className="flex-1 max-w-2xl px-4 sm:px-12 relative">
-        <div className="relative group">
+        <form onSubmit={handleSearchSubmit} className="relative group">
           <Search className={cn("absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors", isSearching ? "animate-pulse text-accent" : "group-focus-within:text-accent")} size={18} />
           <Input 
             className="w-full pl-10 bg-white/5 border-white/10 focus:border-accent/50 focus:ring-accent/20 rounded-xl font-body"
@@ -81,7 +88,7 @@ export default function Navbar() {
             onFocus={() => setShowSuggestions(true)}
             onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
           />
-        </div>
+        </form>
 
         {showSuggestions && (results.length > 0 || isSearching) && (
           <div className="absolute top-full left-4 right-4 sm:left-12 sm:right-12 mt-2 glass-panel border border-white/10 rounded-xl overflow-hidden animate-in fade-in slide-in-from-top-2 shadow-2xl z-[60]">
@@ -95,7 +102,10 @@ export default function Navbar() {
                   {results.map((res, idx) => (
                     <button 
                       key={`${res.video.id}-${idx}`}
-                      onClick={() => router.push(`/video/${res.video.id}`)}
+                      onClick={() => {
+                        router.push(`/video/${res.video.id}`);
+                        setShowSuggestions(false);
+                      }}
                       className="w-full flex items-center gap-3 p-2 hover:bg-white/5 rounded-lg transition-colors text-left group"
                     >
                       <div className="w-20 aspect-video rounded-md bg-white/5 overflow-hidden flex-shrink-0 border border-white/10">
@@ -138,10 +148,7 @@ export default function Navbar() {
           <DropdownMenuTrigger asChild>
             <Button 
               variant="ghost" 
-              className={cn(
-                "p-0.5 w-10 h-10 rounded-xl border border-accent/30 bg-accent/5 overflow-hidden group transition-all duration-500",
-                shouldGlow && "shadow-[0_0_25px_rgba(116,222,236,1)] border-accent ring-2 ring-accent/50 scale-110"
-              )}
+              className="p-0.5 w-10 h-10 rounded-xl border border-accent/30 bg-accent/5 overflow-hidden group transition-all duration-500"
             >
               {user ? (
                 <Avatar className="w-full h-full rounded-[inherit]">
@@ -149,7 +156,7 @@ export default function Navbar() {
                   <AvatarFallback>{user.displayName?.[0] || user.email?.[0]}</AvatarFallback>
                 </Avatar>
               ) : (
-                <UserCircle size={24} className={cn("text-muted-foreground group-hover:text-accent transition-colors", shouldGlow && "text-accent")} />
+                <UserCircle size={24} className="text-muted-foreground group-hover:text-accent transition-colors" />
               )}
             </Button>
           </DropdownMenuTrigger>
