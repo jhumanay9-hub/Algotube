@@ -5,50 +5,61 @@ import React, { useMemo, useState, useEffect } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import VideoCard from '@/components/video-card/VideoCard';
-import { useCollection, useFirestore, useUser, useMemoFirebase } from '@/firebase';
-import { collection, query, where, limit, orderBy } from 'firebase/firestore';
+import { useUser } from '@/firebase';
 import { Layers, Users, Loader2, BellRing, DatabaseZap } from 'lucide-react';
 import { getB2Subscriptions } from '@/app/actions/b2-social';
+import { getB2Videos } from '@/app/actions/b2-store';
 import Link from 'next/link';
 
+/**
+ * SubscriptionsPage
+ * 
+ * This page handles the discovery of videos from creators the user is subscribed to.
+ * It uses the B2 Social Mesh (Backblaze) instead of Firestore to avoid permission/proxy errors.
+ */
 export default function SubscriptionsPage() {
-  const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
   
   const [subscribedCreatorIds, setSubscribedCreatorIds] = useState<string[]>([]);
-  const [isB2Loading, setIsB2Loading] = useState(true);
+  const [allVideos, setAllVideos] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch creator IDs from Backblaze B2
+  // Sync with Backblaze B2 Social Nodes
   useEffect(() => {
-    async function fetchB2Subs() {
-      if (user) {
-        try {
-          const ids = await getB2Subscriptions(user.uid);
-          setSubscribedCreatorIds(ids);
-        } catch (e) {
-          console.error('B2 Subscription fetch failed');
-        } finally {
-          setIsB2Loading(false);
-        }
-      } else {
-        setIsB2Loading(false);
+    async function syncMesh() {
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
+      
+      setIsLoading(true);
+      try {
+        // Fetch both subscription manifest and the global video registry from B2
+        const [ids, vids] = await Promise.all([
+          getB2Subscriptions(user.uid),
+          getB2Videos()
+        ]);
+        setSubscribedCreatorIds(ids);
+        setAllVideos(vids);
+      } catch (e) {
+        console.error('B2 Mesh Sync failed: Falling back to cached state.');
+      } finally {
+        setIsLoading(false);
       }
     }
-    fetchB2Subs();
+    syncMesh();
   }, [user]);
 
-  // Fetch videos from Firestore using IDs from B2
-  const videosQuery = useMemoFirebase(() => {
-    if (!firestore || subscribedCreatorIds.length === 0) return null;
-    return query(
-      collection(firestore, 'videos'),
-      where('uploaderId', 'in', subscribedCreatorIds.slice(0, 30)),
-      orderBy('uploadDate', 'desc'),
-      limit(50)
+  // Algorithmic filtering for the subscriptions feed
+  const subscribedVideos = useMemo(() => {
+    if (subscribedCreatorIds.length === 0) return [];
+    
+    // Filter all videos where the uploader is in the user's subscription list
+    return allVideos.filter(v => 
+      subscribedCreatorIds.includes(v.uploaderId) || 
+      subscribedCreatorIds.includes(v.id) // Fallback for legacy mock ID formats
     );
-  }, [firestore, subscribedCreatorIds]);
-
-  const { data: subscribedVideos, isLoading: isVideosLoading, error: videosError } = useCollection(videosQuery);
+  }, [subscribedCreatorIds, allVideos]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -71,7 +82,7 @@ export default function SubscriptionsPage() {
           </div>
 
           {!user && !isUserLoading ? (
-            <div className="flex flex-col items-center justify-center h-[60vh] text-muted-foreground text-center">
+            <div className="flex flex-col items-center justify-center h-[60vh] text-muted-foreground text-center animate-in fade-in duration-500">
               <div className="w-20 h-20 rounded-full bg-accent/5 flex items-center justify-center mb-6">
                 <BellRing size={40} className="text-accent/40" />
               </div>
@@ -83,13 +94,13 @@ export default function SubscriptionsPage() {
                 </button>
               </Link>
             </div>
-          ) : isB2Loading || isUserLoading ? (
+          ) : isLoading || isUserLoading ? (
             <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
               <Loader2 className="animate-spin text-accent" size={40} />
               <p className="font-code text-xs tracking-widest text-accent uppercase">Resolving B2 Social Nodes...</p>
             </div>
           ) : subscribedCreatorIds.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-[60vh] text-muted-foreground text-center">
+            <div className="flex flex-col items-center justify-center h-[60vh] text-muted-foreground text-center animate-in fade-in duration-500">
               <Users size={64} className="mb-6 opacity-20" />
               <h3 className="text-xl font-headline font-bold text-white mb-2">Your mesh is empty</h3>
               <p className="max-w-xs mb-8">Follow creators to see their latest transmissions here. Manifests are backed up to Backblaze.</p>
@@ -100,21 +111,14 @@ export default function SubscriptionsPage() {
               </Link>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-12">
-              {isVideosLoading ? (
-                [1, 2, 3, 4].map(i => (
-                  <div key={i} className="aspect-video rounded-2xl bg-white/5 animate-pulse" />
-                ))
-              ) : subscribedVideos && subscribedVideos.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-12 animate-in slide-in-from-bottom-4 duration-500">
+              {subscribedVideos.length > 0 ? (
                 subscribedVideos.map((video) => (
                   <VideoCard key={video.id} video={video as any} />
                 ))
               ) : (
-                <div className="col-span-full p-12 glass-panel rounded-3xl text-center">
-                  <p className="text-muted-foreground">No recent transmissions from your B2-linked creators.</p>
-                  {videosError && (
-                    <p className="text-red-400 text-[10px] mt-2 font-code">Warning: Firestore index unreachable. Feed may be incomplete.</p>
-                  )}
+                <div className="col-span-full p-12 glass-panel rounded-3xl text-center border-dashed border-white/5 opacity-50">
+                  <p className="text-muted-foreground font-body">No recent transmissions from your B2-linked creators.</p>
                 </div>
               )}
             </div>
