@@ -5,243 +5,80 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "UserProfile",
       "type": "object",
-      "description": "Represents a user's profile on the AlgoTube platform, storing their personal information, preferences, and social connections.",
+      "description": "Represents a user's profile on the AlgoTube platform.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the UserProfile entity."
-        },
-        "username": {
-          "type": "string",
-          "description": "Unique username chosen by the user, used for display across the platform."
-        },
-        "email": {
-          "type": "string",
-          "description": "User's email address for contact and account recovery. (Not for authentication)",
-          "format": "email"
-        },
-        "profilePictureUrl": {
-          "type": "string",
-          "description": "URL to the user's profile picture or avatar.",
-          "format": "uri"
-        },
-        "bio": {
-          "type": "string",
-          "description": "A short biographical description provided by the user."
-        },
-        "interests": {
-          "type": "array",
-          "description": "A list of tags or keywords representing the user's interests, used by the recommendation engine.",
-          "items": {
-            "type": "string"
-          }
-        },
-        "joinedAt": {
-          "type": "string",
-          "description": "Timestamp when the user registered on the platform.",
-          "format": "date-time"
-        },
-        "subscriberCount": {
-          "type": "number",
-          "description": "Total number of subscribers for this creator."
-        },
-        "subscribedChannelIds": {
-          "type": "array",
-          "description": "References to UserProfile IDs of channels this user has subscribed to.",
-          "items": {
-            "type": "string"
-          }
-        }
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "profilePictureUrl": { "type": "string", "format": "uri" },
+        "bio": { "type": "string" },
+        "interests": { "type": "array", "items": { "type": "string" } },
+        "joinedAt": { "type": "string", "format": "date-time" },
+        "subscriberCount": { "type": "number" },
+        "subscribedChannelIds": { "type": "array", "items": { "type": "string" } }
       },
-      "required": [
-        "id",
-        "username",
-        "email",
-        "joinedAt"
-      ]
+      "required": ["id", "username", "email", "joinedAt"]
     },
     "Video": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Video",
       "type": "object",
-      "description": "Represents a video uploaded to the AlgoTube platform, including its metadata and status.",
+      "description": "Represents a video uploaded to AlgoTube.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Video entity."
-        },
-        "title": {
-          "type": "string",
-          "description": "The title of the video."
-        },
-        "description": {
-          "type": "string",
-          "description": "A detailed description of the video content."
-        },
-        "aiSummary": {
-          "type": "string",
-          "description": "A 2-sentence AI-generated summary of the video content."
-        },
-        "thumbnailUrl": {
-          "type": "string",
-          "description": "URL to the video's thumbnail image.",
-          "format": "uri"
-        },
-        "videoUrl": {
-          "type": "string",
-          "description": "URL to the video file stored in Firebase Storage.",
-          "format": "uri"
-        },
-        "uploadDate": {
-          "type": "string",
-          "description": "Timestamp when the video was uploaded.",
-          "format": "date-time"
-        },
-        "viewsCount": {
-          "type": "number",
-          "description": "The total number of times the video has been viewed."
-        },
-        "uploaderId": {
-          "type": "string",
-          "description": "Reference to the UserProfile ID of the user who uploaded this video."
-        },
-        "likesCount": {
-          "type": "number",
-          "description": "The total number of likes the video has received."
-        },
-        "dislikesCount": {
-          "type": "number",
-          "description": "The total number of dislikes the video has received."
-        },
-        "commentsCount": {
-          "type": "number",
-          "description": "The total number of comments on the video."
-        },
-        "shareCount": {
-          "type": "number",
-          "description": "The total number of times this video has been shared."
-        },
-        "processingStatus": {
-          "type": "string",
-          "description": "The current processing status of the video (e.g., 'uploaded', 'processing', 'ready', 'failed')."
-        },
-        "tags": {
-          "type": "array",
-          "description": "A list of keywords or tags associated with the video.",
-          "items": {
-            "type": "string"
-          }
-        },
-        "category": {
-          "type": "string",
-          "description": "Content category (e.g., 'Cybersecurity', 'Social Life')."
-        },
-        "duration": {
-          "type": "number",
-          "description": "Duration of the media in seconds."
-        },
-        "aspectRatio": {
-          "type": "string",
-          "description": "Aspect ratio of the media ('16:9' or '9:16').",
-          "enum": ["16:9", "9:16"]
-        }
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "aiSummary": { "type": "string" },
+        "thumbnailUrl": { "type": "string", "format": "uri" },
+        "videoUrl": { "type": "string", "format": "uri" },
+        "uploadDate": { "type": "string", "format": "date-time" },
+        "viewsCount": { "type": "number" },
+        "uploaderId": { "type": "string" },
+        "likesCount": { "type": "number" },
+        "dislikesCount": { "type": "number" },
+        "commentsCount": { "type": "number" },
+        "shareCount": { "type": "number" },
+        "processingStatus": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "category": { "type": "string" },
+        "duration": { "type": "number" },
+        "aspectRatio": { "type": "string", "enum": ["16:9", "9:16"] }
       },
-      "required": [
-        "id",
-        "title",
-        "videoUrl",
-        "uploadDate",
-        "uploaderId",
-        "processingStatus"
-      ]
+      "required": ["id", "title", "videoUrl", "uploadDate", "uploaderId", "processingStatus"]
     },
     "Comment": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Comment",
       "type": "object",
-      "description": "Represents a user's comment on a specific video.",
+      "description": "A user's comment on a video.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the comment."
-        },
-        "videoId": {
-          "type": "string",
-          "description": "The ID of the video this comment belongs to."
-        },
-        "userId": {
-          "type": "string",
-          "description": "The ID of the user who posted the comment."
-        },
-        "userName": {
-          "type": "string",
-          "description": "Display name of the user."
-        },
-        "userAvatar": {
-          "type": "string",
-          "description": "URL to the user's avatar image.",
-          "format": "uri"
-        },
-        "content": {
-          "type": "string",
-          "description": "The text content of the comment."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when the comment was created.",
-          "format": "date-time"
-        },
-        "likesCount": {
-          "type": "number",
-          "description": "Number of likes on the comment."
-        }
+        "id": { "type": "string" },
+        "videoId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userAvatar": { "type": "string", "format": "uri" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "likesCount": { "type": "number" }
       },
-      "required": [
-        "videoId",
-        "userId",
-        "content",
-        "createdAt"
-      ]
+      "required": ["videoId", "userId", "content", "createdAt"]
     }
   },
   "auth": {
-    "providers": [
-      "password",
-      "anonymous"
-    ]
+    "providers": ["password", "anonymous"]
   },
   "firestore": {
-    "structure": [
-      {
-        "path": "/userProfiles/{userId}",
-        "definition": {
-          "entityName": "UserProfile",
-          "schema": {
-            "$ref": "#/backend/entities/UserProfile"
-          },
-          "description": "Primary storage for user profiles."
-        }
-      },
-      {
-        "path": "/videos/{videoId}",
-        "definition": {
-          "entityName": "Video",
-          "schema": {
-            "$ref": "#/backend/entities/Video"
-          },
-          "description": "Stores all publicly viewable videos."
-        }
-      },
-      {
-        "path": "/videos/{videoId}/comments/{commentId}",
-        "definition": {
-          "entityName": "Comment",
-          "schema": {
-            "$ref": "#/backend/entities/Comment"
-          },
-          "description": "Sub-collection of comments for each video."
-        }
-      }
-    ]
+    "/userProfiles/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile storage."
+    },
+    "/videos/{videoId}": {
+      "schema": "Video",
+      "description": "Public video storage."
+    },
+    "/videos/{videoId}/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Nested video comments."
+    }
   }
 }
