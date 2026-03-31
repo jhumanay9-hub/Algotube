@@ -1,3 +1,4 @@
+
 'use client';
 
 import { firebaseConfig } from '@/firebase/config';
@@ -26,9 +27,10 @@ export function initializeFirebase() {
 }
 
 export function getSdks(firebaseApp: FirebaseApp) {
-  // Initialize Firestore with settings to bypass potential proxy/connectivity issues in the workstation environment.
+  // Initialize Firestore with standard workstation proxy safety settings
   const firestore = initializeFirestore(firebaseApp, {
     experimentalForceLongPolling: true,
+    useFetchStreams: false,
   });
 
   return {

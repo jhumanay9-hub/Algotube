@@ -1,17 +1,17 @@
 
 "use client";
 
-import React, { useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import VideoCard from '@/components/video-card/VideoCard';
 import { useDoc, useCollection, useFirestore, useUser, useMemoFirebase } from '@/firebase';
 import { doc, collection, query, where, orderBy, limit } from 'firebase/firestore';
-import { Users, Video, Calendar, Loader2, CheckCircle2 } from 'lucide-react';
+import { Users, Video, Calendar, Loader2, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { toggleSubscription } from '@/firebase/social-logic';
+import { getB2Subscriptions, toggleB2Subscription } from '@/app/actions/b2-social';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -21,20 +21,15 @@ export default function ChannelPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [isSubLoading, setIsSubLoading] = useState(true);
+
   const channelRef = useMemoFirebase(() => {
     if (!firestore || !id) return null;
     return doc(firestore, 'userProfiles', id as string);
   }, [firestore, id]);
 
-  const { data: profile, isLoading: isProfileLoading } = useDoc(channelRef);
-
-  const subRef = useMemoFirebase(() => {
-    if (!firestore || !user || !id) return null;
-    return doc(firestore, 'userProfiles', user.uid, 'subscriptions', id as string);
-  }, [firestore, user, id]);
-
-  const { data: subscription } = useDoc(subRef);
-  const isSubscribed = !!subscription;
+  const { data: profile, isLoading: isProfileLoading, error: profileError } = useDoc(channelRef);
 
   const videosQuery = useMemoFirebase(() => {
     if (!firestore || !id) return null;
@@ -46,7 +41,26 @@ export default function ChannelPage() {
     );
   }, [firestore, id]);
 
-  const { data: channelVideos, isLoading: isVideosLoading } = useCollection(videosQuery);
+  const { data: channelVideos, isLoading: isVideosLoading, error: videosError } = useCollection(videosQuery);
+
+  // Load subscription state from B2
+  useEffect(() => {
+    async function checkSubscription() {
+      if (user && id) {
+        try {
+          const subs = await getB2Subscriptions(user.uid);
+          setIsSubscribed(subs.includes(id as string));
+        } catch (e) {
+          console.warn('Fallback: B2 Subscription check failed');
+        } finally {
+          setIsSubLoading(false);
+        }
+      } else {
+        setIsSubLoading(false);
+      }
+    }
+    checkSubscription();
+  }, [user, id]);
 
   const handleSubscribe = async () => {
     if (isUserLoading) return;
@@ -60,15 +74,28 @@ export default function ChannelPage() {
       return;
     }
 
-    if (!firestore || !id) return;
-    await toggleSubscription(firestore, user.uid, id as string, isSubscribed);
-    toast({
-      title: isSubscribed ? "Unsubscribed" : "Subscribed",
-      description: isSubscribed ? "Channel removed from your feed." : "You're now following this creator.",
-    });
+    try {
+      setIsSubLoading(true);
+      const result = await toggleB2Subscription(user.uid, id as string, isSubscribed);
+      if (result) {
+        setIsSubscribed(result.isSubscribed);
+        toast({
+          title: result.isSubscribed ? "Subscribed" : "Unsubscribed",
+          description: result.isSubscribed ? "Connected via B2 Social Mesh." : "Disconnected from creator.",
+        });
+      }
+    } catch (e: any) {
+      toast({
+        variant: "destructive",
+        title: "Mesh Error",
+        description: "B2 Persistence node failed to respond."
+      });
+    } finally {
+      setIsSubLoading(false);
+    }
   };
 
-  if (isProfileLoading) {
+  if (isProfileLoading && !profileError) {
     return (
       <div className="flex flex-col h-screen overflow-hidden">
         <Navbar />
@@ -96,7 +123,7 @@ export default function ChannelPage() {
           <div className="px-8 -mt-12 flex flex-col md:flex-row items-end gap-6 mb-12">
             <Avatar className="h-32 w-32 border-4 border-background rounded-3xl shadow-2xl">
               <AvatarImage src={profile?.profilePictureUrl || `https://picsum.photos/seed/${id}/200/200`} />
-              <AvatarFallback className="text-4xl bg-white/5">{profile?.username?.[0]?.toUpperCase()}</AvatarFallback>
+              <AvatarFallback className="text-4xl bg-white/5">{profile?.username?.[0]?.toUpperCase() || 'A'}</AvatarFallback>
             </Avatar>
             
             <div className="flex-1 pb-2">
@@ -105,7 +132,7 @@ export default function ChannelPage() {
                 <CheckCircle2 className="text-accent fill-accent/20" size={20} />
               </div>
               <div className="flex items-center gap-4 text-sm text-muted-foreground font-body">
-                <span>@{profile?.username?.toLowerCase().replace(/\s+/g, '')}</span>
+                <span>@{profile?.username?.toLowerCase().replace(/\s+/g, '') || 'creator'}</span>
                 <span className="flex items-center gap-1"><Users size={14} /> {profile?.subscriberCount || 0} subscribers</span>
                 <span className="flex items-center gap-1"><Video size={14} /> {channelVideos?.length || 0} videos</span>
               </div>
@@ -113,6 +140,7 @@ export default function ChannelPage() {
 
             <Button 
               onClick={handleSubscribe}
+              disabled={isSubLoading || isUserLoading}
               className={cn(
                 "mb-2 rounded-xl font-headline font-bold px-8 h-12 transition-all duration-300",
                 isSubscribed 
@@ -120,9 +148,16 @@ export default function ChannelPage() {
                   : "bg-white text-black hover:bg-white/90"
               )}
             >
-              {isSubscribed ? "SUBSCRIBED" : "SUBSCRIBE"}
+              {isSubLoading ? <Loader2 className="animate-spin" size={18} /> : (isSubscribed ? "SUBSCRIBED (B2)" : "SUBSCRIBE")}
             </Button>
           </div>
+
+          {profileError && (
+            <div className="mx-8 mb-8 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400 text-sm">
+              <ShieldAlert size={18} />
+              <span>Firestore node unreachable. Using B2 Social Mesh fallback for interactions.</span>
+            </div>
+          )}
 
           {/* Channel Content */}
           <div className="px-4">

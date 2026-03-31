@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Navbar from '@/components/layout/Navbar';
@@ -11,12 +11,13 @@ import CanvasVideoPlayer from '@/components/video-player/CanvasVideoPlayer';
 import VideoCard from '@/components/video-card/VideoCard';
 import { MOCK_VIDEOS } from '@/app/lib/mock-data';
 import { useFirebase, useUser, useDoc, useMemoFirebase } from '@/firebase';
-import { doc, runTransaction, increment, serverTimestamp, setDoc } from 'firebase/firestore';
-import { Share2, ThumbsUp, ThumbsDown, Eye, Sparkles, ShieldCheck, UserPlus, UserCheck, Loader2, Lock } from 'lucide-react';
+import { doc, runTransaction, increment, serverTimestamp } from 'firebase/firestore';
+import { Share2, ThumbsUp, Eye, Sparkles, ShieldCheck, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { personalizeVideoRecommendations, PersonalizedVideoRecommendationsOutput } from '@/ai/flows/personalized-video-recommendations-flow';
-import { toggleSubscription, addToHistory } from '@/firebase/social-logic';
+import { addToHistory } from '@/firebase/social-logic';
+import { getB2Subscriptions, toggleB2Subscription } from '@/app/actions/b2-social';
 import { useS3Url } from '@/hooks/use-s3-url';
 import { cn } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -38,20 +39,31 @@ export default function VideoDetailPage() {
   const displayVideo = video || MOCK_VIDEOS.find(v => v.id === id) || MOCK_VIDEOS[0];
   const creatorId = displayVideo.uploaderId || (displayVideo as any).uploaderId || "system_mock";
 
-  // S3 URL resolution for Backblaze B2 playback
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [isSubLoading, setIsSubLoading] = useState(true);
+
+  // B2 Social Mesh Sync
+  useEffect(() => {
+    async function syncSubscription() {
+      if (user && creatorId) {
+        try {
+          const subs = await getB2Subscriptions(user.uid);
+          setIsSubscribed(subs.includes(creatorId));
+        } catch (e) {
+          console.warn('B2 Sync Failure');
+        } finally {
+          setIsSubLoading(false);
+        }
+      } else {
+        setIsSubLoading(false);
+      }
+    }
+    syncSubscription();
+  }, [user, creatorId]);
+
+  // S3 URL resolution
   const s3Key = (displayVideo as any).s3Key || (displayVideo as any).videoUrl;
-  const { url: streamUrl, isLoading: isStreamLoading } = useS3Url(
-    s3Key, 
-    (displayVideo as any).videoUrl // Fallback to original URL
-  );
-
-  const subRef = useMemoFirebase(() => {
-    if (!firestore || !user || !creatorId) return null;
-    return doc(firestore, 'userProfiles', user.uid, 'subscriptions', creatorId);
-  }, [firestore, user, creatorId]);
-
-  const { data: subscription } = useDoc(subRef);
-  const isSubscribed = !!subscription;
+  const { url: streamUrl, isLoading: isStreamLoading } = useS3Url(s3Key, (displayVideo as any).videoUrl);
 
   const [recommendations, setRecommendations] = useState<PersonalizedVideoRecommendationsOutput | null>(null);
 
@@ -64,17 +76,11 @@ export default function VideoDetailPage() {
   useEffect(() => {
     async function getRecommendations() {
       if (!displayVideo) return;
-      
       const result = await personalizeVideoRecommendations({
         userId: user?.uid || "anonymous",
         userInterests: ["tech", "coding"],
         viewingHistory: MOCK_VIDEOS.slice(0, 2).map(v => ({ id: v.id, title: v.title, tags: v.tags })),
-        availableVideos: MOCK_VIDEOS.map(v => ({
-          id: v.id,
-          title: v.title,
-          description: v.title,
-          tags: v.tags
-        }))
+        availableVideos: MOCK_VIDEOS.map(v => ({ id: v.id, title: v.title, description: v.title, tags: v.tags }))
       });
       setRecommendations(result);
     }
@@ -83,56 +89,19 @@ export default function VideoDetailPage() {
 
   const handleInteraction = async (type: 'like' | 'dislike') => {
     if (isUserLoading || !user || !firestore || !id || !videoRef) return;
-
     const interactionRef = doc(firestore, 'userProfiles', user.uid, 'videoInteractions', `${id}_${type}`);
 
     try {
       await runTransaction(firestore, async (transaction) => {
         const interactionDoc = await transaction.get(interactionRef);
-        if (interactionDoc.exists()) {
-          return Promise.reject("ALREADY_INTERACTED");
-        }
+        if (interactionDoc.exists()) return Promise.reject("ALREADY_INTERACTED");
 
-        const videoDoc = await transaction.get(videoRef);
-        if (!videoDoc.exists()) {
-          transaction.set(videoRef, {
-            id: id,
-            title: displayVideo.title,
-            description: (displayVideo as any).description || displayVideo.title,
-            videoUrl: (displayVideo as any).videoUrl,
-            thumbnailUrl: (displayVideo as any).thumbnailUrl || (displayVideo as any).thumbnail,
-            uploaderId: creatorId,
-            uploadDate: serverTimestamp(),
-            viewsCount: (displayVideo as any).viewsCount || (displayVideo as any).views,
-            likesCount: type === 'like' ? 1 : 0,
-            dislikesCount: type === 'dislike' ? 1 : 0,
-            commentsCount: 0,
-            shareCount: 0,
-            processingStatus: 'ready',
-            category: (displayVideo as any).category || "General",
-            tags: displayVideo.tags,
-            creator: displayVideo.creator,
-            s3Key: (displayVideo as any).s3Key || null
-          });
-        } else {
-          transaction.update(videoRef, {
-            [type === 'like' ? 'likesCount' : 'dislikesCount']: increment(1)
-          });
-        }
-
-        transaction.set(interactionRef, {
-          userId: user.uid,
-          videoId: id,
-          interactionType: type,
-          timestamp: serverTimestamp()
-        });
+        transaction.update(videoRef, { [type === 'like' ? 'likesCount' : 'dislikesCount']: increment(1) });
+        transaction.set(interactionRef, { userId: user.uid, videoId: id, interactionType: type, timestamp: serverTimestamp() });
       });
-      
       toast({ title: "Success!", description: `Transmission ${type}d.` });
     } catch (e: any) {
-      if (e === "ALREADY_INTERACTED") {
-        toast({ title: "Already Interacted" });
-      } else {
+      if (e !== "ALREADY_INTERACTED") {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
           path: videoRef.path,
           operation: 'update',
@@ -143,9 +112,19 @@ export default function VideoDetailPage() {
   };
 
   const handleSubscribe = async () => {
-    if (isUserLoading || !user || !firestore || !creatorId) return;
-    await toggleSubscription(firestore, user.uid, creatorId, isSubscribed);
-    toast({ title: isSubscribed ? "Unsubscribed" : "Subscribed" });
+    if (isUserLoading || !user || !creatorId) return;
+    try {
+      setIsSubLoading(true);
+      const result = await toggleB2Subscription(user.uid, creatorId, isSubscribed);
+      if (result) {
+        setIsSubscribed(result.isSubscribed);
+        toast({ title: result.isSubscribed ? "Subscribed (B2)" : "Unsubscribed (B2)" });
+      }
+    } catch (e) {
+      toast({ variant: "destructive", title: "B2 Mesh Error" });
+    } finally {
+      setIsSubLoading(false);
+    }
   };
 
   return (
@@ -190,13 +169,13 @@ export default function VideoDetailPage() {
                   </div>
                   <Button 
                     onClick={handleSubscribe}
-                    disabled={isUserLoading}
+                    disabled={isSubLoading || isUserLoading}
                     className={cn(
                       "ml-4 rounded-xl font-headline font-bold transition-all duration-300",
                       isSubscribed ? "bg-accent/10 text-accent border border-accent/40" : "bg-white text-black hover:bg-white/90"
                     )}
                   >
-                    {isSubscribed ? "SUBSCRIBED" : "SUBSCRIBE"}
+                    {isSubLoading ? <Loader2 className="animate-spin" size={14} /> : (isSubscribed ? "SUBSCRIBED" : "SUBSCRIBE")}
                   </Button>
                 </div>
 
