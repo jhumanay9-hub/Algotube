@@ -4,7 +4,8 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * ALGOTUBE SECURITY RULES - PRODUCTION READY
+     * ALGOTUBE SECURITY RULES
+     * Ensures public read access for community content and private access for user data.
      */
 
     function isSignedIn() {
@@ -15,17 +16,39 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // --- COLLECTION RULES ---
+    // --- COMMUNITY VIDEOS ---
+    match /videos/{videoId} {
+      // Allow anyone to see videos and the video list
+      allow read: if true;
+      
+      // Allow signed-in users to upload and like/dislike
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      
+      // Only uploader can delete their transmission
+      allow delete: if isSignedIn() && (resource.data.uploaderId == request.auth.uid);
 
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isSignedIn();
+        allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid);
+      }
+    }
+
+    // --- USER PROFILES & PRIVATE DATA ---
     match /userProfiles/{userId} {
-      allow get: if true;
-      allow list: if isSignedIn();
+      // Profiles are public for discovery
+      allow read: if true;
+      
+      // Users can only create their own profile
       allow create: if isOwner(userId);
-      // Allow anyone signed in to update engagement metrics (subscriberCount) 
-      // while owner can update everything.
+      
+      // Allow owners to edit profile, or others to increment subscriberCount
       allow update: if isOwner(userId) || isSignedIn();
+      
       allow delete: if isOwner(userId);
 
+      // Private sub-collections
       match /videoInteractions/{interactionId} {
         allow read, write: if isOwner(userId);
       }
@@ -36,21 +59,6 @@ service cloud.firestore {
       
       match /history/{videoId} {
         allow read, write: if isOwner(userId);
-      }
-    }
-
-    match /videos/{videoId} {
-      allow get, list: if true;
-      // Allow signed-in users to create video metadata (supports mock hydration)
-      allow create: if isSignedIn();
-      // Allow uploader to update everything, or signed-in users to update engagement metrics
-      allow update: if isSignedIn();
-      allow delete: if isSignedIn() && resource.data.uploaderId == request.auth.uid;
-
-      match /comments/{commentId} {
-        allow get, list: if true;
-        allow create: if isSignedIn();
-        allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid);
       }
     }
   }

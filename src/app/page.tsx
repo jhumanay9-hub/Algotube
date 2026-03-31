@@ -40,13 +40,21 @@ export default function Home() {
   const { data: firestoreVideos, isLoading } = useCollection(videosQuery);
 
   const displayVideos = useMemo(() => {
+    // Merge Firestore videos with Mock videos
     const baseVideos = [...(firestoreVideos || []), ...MOCK_VIDEOS];
     
-    // Deduplicate by ID to prevent key errors (e.g., if a mock video is also in Firestore)
-    const uniqueVideos = Array.from(new Map(baseVideos.map(v => [v.id, v])).values());
+    // Deduplicate by ID to prevent key errors
+    const uniqueVideosMap = new Map();
+    baseVideos.forEach(v => {
+      if (!uniqueVideosMap.has(v.id)) {
+        uniqueVideosMap.set(v.id, v);
+      }
+    });
+    const uniqueVideos = Array.from(uniqueVideosMap.values());
     
     if (selectedCategory === "All") {
-      return shuffle(uniqueVideos).slice(0, 24);
+      // Only shuffle and slice if we have videos
+      return uniqueVideos.length > 0 ? shuffle(uniqueVideos).slice(0, 24) : [];
     }
     
     return uniqueVideos.filter(v => 
@@ -133,7 +141,7 @@ export default function Home() {
             </div>
           )}
 
-          {user && selectedCategory === "All" && (
+          {user && selectedCategory === "All" && trendingVideos.length > 0 && (
             <>
               <div className="mb-6 flex items-center gap-3">
                 <Sparkles className="text-accent" size={24} />
@@ -151,19 +159,6 @@ export default function Home() {
       </div>
 
       <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(116, 222, 236, 0.1);
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: rgba(116, 222, 236, 0.2);
-        }
         .no-scrollbar::-webkit-scrollbar {
           display: none;
         }
