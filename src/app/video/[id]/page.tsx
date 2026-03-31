@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Navbar from '@/components/layout/Navbar';
@@ -9,252 +9,181 @@ import Sidebar from '@/components/layout/Sidebar';
 import CommunityPanel from '@/components/layout/CommunityPanel';
 import CanvasVideoPlayer from '@/components/video-player/CanvasVideoPlayer';
 import VideoCard from '@/components/video-card/VideoCard';
-import { MOCK_VIDEOS } from '@/app/lib/mock-data';
-import { useFirebase, useUser, useDoc, useMemoFirebase } from '@/firebase';
-import { doc, runTransaction, increment, serverTimestamp } from 'firebase/firestore';
+import { useUser } from '@/firebase';
 import { Share2, ThumbsUp, Eye, Sparkles, ShieldCheck, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { personalizeVideoRecommendations, PersonalizedVideoRecommendationsOutput } from '@/ai/flows/personalized-video-recommendations-flow';
-import { addToHistory } from '@/firebase/social-logic';
-import { getB2Subscriptions, toggleB2Subscription } from '@/app/actions/b2-social';
+import { toggleB2Subscription, getB2Subscriptions } from '@/app/actions/b2-social';
+import { getB2Videos, toggleB2Like, getB2LikedVideos, addToB2History } from '@/app/actions/b2-store';
 import { useS3Url } from '@/hooks/use-s3-url';
 import { cn } from '@/lib/utils';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function VideoDetailPage() {
   const { id } = useParams();
-  const { firestore } = useFirebase();
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
-  const videoRef = useMemoFirebase(() => {
-    if (!firestore || !id) return null;
-    return doc(firestore, 'videos', id as string);
-  }, [firestore, id]);
-
-  const { data: video, isLoading: isVideoLoading } = useDoc(videoRef);
-  
-  const displayVideo = video || MOCK_VIDEOS.find(v => v.id === id) || MOCK_VIDEOS[0];
-  const creatorId = displayVideo.uploaderId || (displayVideo as any).uploaderId || "system_mock";
-
+  const [video, setVideo] = useState<any>(null);
+  const [allVideos, setAllVideos] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLiked, setIsLiked] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isSubLoading, setIsSubLoading] = useState(true);
+  const [recommendations, setRecommendations] = useState<PersonalizedVideoRecommendationsOutput | null>(null);
 
-  // B2 Social Mesh Sync
+  // Initial Data Sync
   useEffect(() => {
-    async function syncSubscription() {
-      if (user && creatorId) {
-        try {
-          const subs = await getB2Subscriptions(user.uid);
-          setIsSubscribed(subs.includes(creatorId));
-        } catch (e) {
-          console.warn('B2 Sync Failure');
-        } finally {
-          setIsSubLoading(false);
-        }
+    async function sync() {
+      setIsLoading(true);
+      const videos = await getB2Videos();
+      const found = videos.find(v => v.id === id);
+      setVideo(found || videos[0]);
+      setAllVideos(videos);
+      setIsLoading(false);
+
+      if (user) {
+        // Resolve social state
+        const [likes, subs] = await Promise.all([
+          getB2LikedVideos(user.uid),
+          getB2Subscriptions(user.uid)
+        ]);
+        setIsLiked(likes.includes(id as string));
+        
+        const creatorId = found?.uploaderId || found?.id || "system";
+        setIsSubscribed(subs.includes(creatorId));
+        setIsSubLoading(false);
+
+        // Add to history
+        addToB2History(user.uid, id as string);
       } else {
         setIsSubLoading(false);
       }
     }
-    syncSubscription();
-  }, [user, creatorId]);
+    sync();
+  }, [id, user]);
 
-  // S3 URL resolution
-  const s3Key = (displayVideo as any).s3Key || (displayVideo as any).videoUrl;
-  const { url: streamUrl, isLoading: isStreamLoading } = useS3Url(s3Key, (displayVideo as any).videoUrl);
-
-  const [recommendations, setRecommendations] = useState<PersonalizedVideoRecommendationsOutput | null>(null);
-
+  // AI Recommendations
   useEffect(() => {
-    if (user && firestore && id) {
-      addToHistory(firestore, user.uid, id as string);
-    }
-  }, [id, user, firestore]);
-
-  useEffect(() => {
-    async function getRecommendations() {
-      if (!displayVideo) return;
+    if (!video || allVideos.length === 0) return;
+    async function getRecs() {
       const result = await personalizeVideoRecommendations({
-        userId: user?.uid || "anonymous",
+        userId: user?.uid || "guest",
         userInterests: ["tech", "coding"],
-        viewingHistory: MOCK_VIDEOS.slice(0, 2).map(v => ({ id: v.id, title: v.title, tags: v.tags })),
-        availableVideos: MOCK_VIDEOS.map(v => ({ id: v.id, title: v.title, description: v.title, tags: v.tags }))
+        viewingHistory: allVideos.slice(0, 3).map(v => ({ id: v.id, title: v.title, tags: v.tags })),
+        availableVideos: allVideos.slice(0, 10).map(v => ({ id: v.id, title: v.title, description: v.title, tags: v.tags }))
       });
       setRecommendations(result);
     }
-    getRecommendations();
-  }, [id, user, displayVideo]);
+    getRecs();
+  }, [video, allVideos, user]);
 
-  const handleInteraction = async (type: 'like' | 'dislike') => {
-    if (isUserLoading || !user || !firestore || !id || !videoRef) return;
-    const interactionRef = doc(firestore, 'userProfiles', user.uid, 'videoInteractions', `${id}_${type}`);
+  const s3Key = video?.s3Key || video?.videoUrl;
+  const { url: streamUrl, isLoading: isStreamLoading } = useS3Url(s3Key, video?.videoUrl);
 
-    try {
-      await runTransaction(firestore, async (transaction) => {
-        // 1. Check if user already interacted
-        const interactionDoc = await transaction.get(interactionRef);
-        if (interactionDoc.exists()) return Promise.reject("ALREADY_INTERACTED");
-
-        // 2. Get video doc for existence check (Lazy Hydration)
-        const videoSnapshot = await transaction.get(videoRef);
-        
-        if (!videoSnapshot.exists()) {
-          // Hydrate the mock video into Firestore on-the-fly
-          const mockVideo = MOCK_VIDEOS.find(v => v.id === id);
-          transaction.set(videoRef, {
-            id: id,
-            title: mockVideo?.title || "Unknown Transmission",
-            description: "Hydrated from mock registry.",
-            uploaderId: "system_mock",
-            uploadDate: serverTimestamp(),
-            viewsCount: (mockVideo?.views || 0) + 1,
-            likesCount: type === 'like' ? 1 : 0,
-            dislikesCount: type === 'dislike' ? 1 : 0,
-            commentsCount: 0,
-            processingStatus: 'ready',
-            category: mockVideo?.category || 'Social Life',
-            tags: mockVideo?.tags || [],
-            creator: mockVideo?.creator || 'System'
-          });
-        } else {
-          // Perform normal increment on existing record
-          transaction.update(videoRef, { 
-            [type === 'like' ? 'likesCount' : 'dislikesCount']: increment(1) 
-          });
-        }
-
-        // 3. Persist interaction record
-        transaction.set(interactionRef, { 
-          userId: user.uid, 
-          videoId: id, 
-          interactionType: type, 
-          timestamp: serverTimestamp() 
-        });
-      });
-      toast({ title: "Success!", description: `Transmission ${type}d.` });
-    } catch (e: any) {
-      if (e === "ALREADY_INTERACTED") {
-        toast({ title: "Already Interacted", description: "You have already recorded your stance." });
-      } else {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: videoRef.path,
-          operation: 'update',
-          requestResourceData: { [type === 'like' ? 'likesCount' : 'dislikesCount']: 'increment' }
-        }));
-      }
+  const handleLike = async () => {
+    if (!user) {
+      toast({ title: "Auth Required", description: "Sign in to like this transmission." });
+      return;
     }
+    const result = await toggleB2Like(user.uid, id as string);
+    setIsLiked(result);
+    toast({ title: result ? "Liked" : "Unliked", description: "Updated on the B2 Social Mesh." });
   };
 
   const handleSubscribe = async () => {
-    if (isUserLoading || !user || !creatorId) return;
+    if (!user || !video) return;
+    const creatorId = video.uploaderId || video.id;
     try {
       setIsSubLoading(true);
       const result = await toggleB2Subscription(user.uid, creatorId, isSubscribed);
-      if (result) {
-        setIsSubscribed(result.isSubscribed);
-        toast({ title: result.isSubscribed ? "Subscribed (B2)" : "Unsubscribed (B2)" });
-      }
-    } catch (e) {
-      toast({ variant: "destructive", title: "B2 Mesh Error" });
+      if (result) setIsSubscribed(result.isSubscribed);
     } finally {
       setIsSubLoading(false);
     }
   };
 
-  return (
-    <div className="flex flex-col h-screen overflow-hidden relative">
-      <Navbar />
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-screen items-center justify-center gap-4">
+        <Loader2 className="animate-spin text-accent" size={48} />
+        <p className="font-code text-sm tracking-widest text-accent uppercase">Resolving B2 Transmission...</p>
+      </div>
+    );
+  }
 
+  return (
+    <div className="flex flex-col h-screen overflow-hidden">
+      <Navbar />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
-
         <main className="flex-1 overflow-y-auto p-4 pt-0 custom-scrollbar flex gap-4">
           <div className="flex-1 flex flex-col gap-6">
-            <div className="relative aspect-video bg-black rounded-2xl overflow-hidden ring-1 ring-white/10 shadow-2xl">
+            <div className="relative aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl">
               {isStreamLoading ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-xl z-20 gap-4">
-                  <div className="w-16 h-16 border-4 border-accent/20 border-t-accent rounded-full animate-spin shadow-[0_0_20px_rgba(116,222,236,0.2)]" />
-                  <p className="font-code text-xs text-accent animate-pulse uppercase tracking-[0.2em]">Resolving S3 Mesh Stream...</p>
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black gap-4">
+                  <Loader2 className="animate-spin text-accent" />
+                  <p className="text-[10px] font-code text-accent uppercase">Syncing B2 Stream...</p>
                 </div>
               ) : (
-                <CanvasVideoPlayer src={streamUrl || "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"} />
+                <CanvasVideoPlayer src={streamUrl || ""} />
               )}
             </div>
             
             <div className="glass-panel rounded-2xl p-6 relative">
               <div className="absolute top-6 right-6 flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-[10px] text-accent font-code">
-                <ShieldCheck size={12} /> B2 PROTECTED TRANSMISSION
+                <ShieldCheck size={12} /> B2 DATA MESH PERSISTENCE
               </div>
-              
-              <h1 className="text-2xl font-headline font-bold mb-4 pr-32">{displayVideo.title}</h1>
-              
+              <h1 className="text-2xl font-headline font-bold mb-4">{video?.title}</h1>
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-4">
-                  <Link href={`/channel/${creatorId}`}>
-                    <div className="w-12 h-12 rounded-xl bg-accent/10 border border-accent/30 flex items-center justify-center font-bold text-accent hover:bg-accent/20 transition-all cursor-pointer">
-                      {displayVideo.creator?.[0] || "A"}
-                    </div>
-                  </Link>
+                  <div className="w-12 h-12 rounded-xl bg-accent/10 border border-accent/30 flex items-center justify-center font-bold text-accent uppercase">
+                    {video?.creator?.[0] || "C"}
+                  </div>
                   <div>
-                    <Link href={`/channel/${creatorId}`} className="font-bold text-sm hover:text-accent transition-colors block">
-                      {displayVideo.creator || "Mesh Creator"}
-                    </Link>
+                    <p className="font-bold text-sm">{video?.creator || "Mesh Creator"}</p>
                     <p className="text-xs text-muted-foreground">AlgoTube Citizen</p>
                   </div>
                   <Button 
                     onClick={handleSubscribe}
-                    disabled={isSubLoading || isUserLoading}
+                    disabled={isSubLoading}
                     className={cn(
-                      "ml-4 rounded-xl font-headline font-bold transition-all duration-300",
+                      "ml-4 rounded-xl font-headline font-bold transition-all",
                       isSubscribed ? "bg-accent/10 text-accent border border-accent/40" : "bg-white text-black hover:bg-white/90"
                     )}
                   >
-                    {isSubLoading ? <Loader2 className="animate-spin" size={14} /> : (isSubscribed ? "SUBSCRIBED" : "SUBSCRIBE")}
+                    {isSubscribed ? "SUBSCRIBED" : "SUBSCRIBE"}
                   </Button>
                 </div>
-
                 <div className="flex items-center gap-2">
-                  <Button variant="ghost" onClick={() => handleInteraction('like')} className="bg-white/5 rounded-xl border border-white/10 gap-2 px-4 h-11">
-                    <ThumbsUp size={16} /> {(displayVideo as any).likesCount || 0}
+                  <Button variant="ghost" onClick={handleLike} className={cn("rounded-xl gap-2 h-11 px-4", isLiked ? "text-accent bg-accent/10" : "bg-white/5")}>
+                    <ThumbsUp size={16} className={isLiked ? "fill-accent" : ""} /> {isLiked ? "Liked" : "Like"}
                   </Button>
-                  <Button variant="ghost" onClick={() => {}} className="bg-white/5 border border-white/10 rounded-xl gap-2 h-11 px-4">
+                  <Button variant="ghost" className="bg-white/5 border border-white/10 rounded-xl gap-2 h-11 px-4">
                     <Share2 size={16} /> Share
                   </Button>
                 </div>
               </div>
-
-              <div className="bg-white/5 rounded-xl p-5 font-body text-sm border border-white/5">
-                <div className="flex gap-4 mb-4 font-bold text-foreground items-center">
-                  <span className="flex items-center gap-1.5 text-accent">
-                    <Eye size={14}/> {(displayVideo as any).viewsCount || (displayVideo as any).views} views
-                  </span>
+              <div className="bg-white/5 rounded-xl p-5 border border-white/5">
+                <div className="flex gap-4 mb-4 text-accent text-xs font-bold items-center">
+                  <Eye size={14}/> {video?.viewsCount || 0} views on the mesh
                 </div>
-                <p className="mb-4">{(displayVideo as any).description || "No transmission description available."}</p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {displayVideo.tags?.map(t => (
-                    <span key={t} className="px-3 py-1 rounded-md bg-white/5 text-accent font-code text-[10px] border border-white/5">
-                      #{t}
-                    </span>
-                  ))}
-                </div>
+                <p className="text-sm text-foreground/80">{video?.description || "No transmission metadata provided."}</p>
               </div>
             </div>
 
             <div className="mb-10">
               <h3 className="text-lg font-headline font-bold mb-6 flex items-center gap-2 text-accent">
-                <Sparkles size={20} /> SEMANTIC MATCHES
+                <Sparkles size={20} /> ALGORITHMIC MATCHES (B2)
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {recommendations?.recommendedVideos.map(rec => {
-                  const v = MOCK_VIDEOS.find(mv => mv.id === rec.id) || MOCK_VIDEOS[0];
-                  return <VideoCard key={rec.id} video={v} />;
+                  const v = allVideos.find(mv => mv.id === rec.id);
+                  return v ? <VideoCard key={rec.id} video={v} /> : null;
                 })}
               </div>
             </div>
           </div>
-
           <CommunityPanel videoId={id as string} />
         </main>
       </div>

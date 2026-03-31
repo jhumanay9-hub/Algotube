@@ -1,22 +1,18 @@
 
 "use client";
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import VideoCard from '@/components/video-card/VideoCard';
-import { MOCK_VIDEOS } from '@/app/lib/mock-data';
 import { heapSortTrending } from '@/lib/sorting';
-import { TrendingUp, Sparkles, Zap, Heart } from 'lucide-react';
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, limit } from 'firebase/firestore';
+import { TrendingUp, Sparkles, Zap, Heart, DatabaseZap, Loader2 } from 'lucide-react';
+import { useUser } from '@/firebase';
 import { cn } from '@/lib/utils';
+import { getB2Videos } from '@/app/actions/b2-store';
 
 const CATEGORIES = ["All", "Entertainment", "Social Life", "Computer Science", "Physics", "Cybersecurity"];
 
-/**
- * Fisher-Yates Shuffle Algorithm for mixing results
- */
 function shuffle<T>(array: T[]): T[] {
   const result = [...array];
   for (let i = result.length - 1; i > 0; i--) {
@@ -28,40 +24,29 @@ function shuffle<T>(array: T[]): T[] {
 
 export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [videos, setVideos] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const { user } = useUser();
-  const firestore = useFirestore();
 
-  const videosQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    if (selectedCategory === "All") return query(collection(firestore, 'videos'), limit(50));
-    return query(collection(firestore, 'videos'), where('category', '==', selectedCategory), limit(50));
-  }, [firestore, selectedCategory]);
-
-  const { data: firestoreVideos, isLoading } = useCollection(videosQuery);
+  useEffect(() => {
+    async function loadData() {
+      setIsLoading(true);
+      const b2Videos = await getB2Videos();
+      setVideos(b2Videos);
+      setIsLoading(false);
+    }
+    loadData();
+  }, []);
 
   const displayVideos = useMemo(() => {
-    // Merge Firestore videos with Mock videos
-    const baseVideos = [...(firestoreVideos || []), ...MOCK_VIDEOS];
-    
-    // Deduplicate by ID to prevent key errors
-    const uniqueVideosMap = new Map();
-    baseVideos.forEach(v => {
-      if (!uniqueVideosMap.has(v.id)) {
-        uniqueVideosMap.set(v.id, v);
-      }
-    });
-    const uniqueVideos = Array.from(uniqueVideosMap.values());
-    
     if (selectedCategory === "All") {
-      // Only shuffle and slice if we have videos
-      return uniqueVideos.length > 0 ? shuffle(uniqueVideos).slice(0, 24) : [];
+      return videos.length > 0 ? shuffle(videos).slice(0, 24) : [];
     }
-    
-    return uniqueVideos.filter(v => 
+    return videos.filter(v => 
       v.category === selectedCategory || 
       (v as any).tags?.some((t: string) => t.toLowerCase() === selectedCategory.toLowerCase())
     );
-  }, [firestoreVideos, selectedCategory]);
+  }, [videos, selectedCategory]);
 
   const trendingVideos = useMemo(() => heapSortTrending(displayVideos as any), [displayVideos]);
 
@@ -73,8 +58,7 @@ export default function Home() {
         <Sidebar />
         
         <main className="flex-1 overflow-y-auto p-4 pt-0 custom-scrollbar">
-          {/* Category Filter Bar */}
-          <div className="flex items-center gap-2 mb-6 overflow-x-auto py-4 scrollbar-hide no-scrollbar sticky top-0 bg-background/50 backdrop-blur-md z-20">
+          <div className="flex items-center gap-2 mb-6 overflow-x-auto py-4 no-scrollbar sticky top-0 bg-background/50 backdrop-blur-md z-20">
             {CATEGORIES.map((cat) => (
               <button
                 key={cat}
@@ -89,31 +73,27 @@ export default function Home() {
                 {cat}
               </button>
             ))}
+            <div className="ml-auto flex items-center gap-2 px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-[9px] text-accent font-code whitespace-nowrap">
+              <DatabaseZap size={10} /> B2 MESH ACTIVE
+            </div>
           </div>
 
-          {/* Hero Section - Only show on All */}
           {selectedCategory === "All" && (
             <div className="mb-10 glass-panel rounded-3xl p-8 relative overflow-hidden group min-h-[320px] flex items-center">
               <div className="absolute top-0 right-0 p-12 opacity-10 group-hover:opacity-20 transition-opacity">
                 <Heart size={200} className="text-accent fill-accent/20" />
               </div>
-              
               <div className="relative z-10 max-w-2xl">
                 <div className="flex items-center gap-2 mb-4 text-accent">
                   <Sparkles size={20} />
-                  <span className="font-code text-xs tracking-widest uppercase">Community: Creator Spotlight</span>
+                  <span className="font-code text-xs tracking-widest uppercase">B2 Cloud Mesh: Operational</span>
                 </div>
                 <h1 className="text-5xl font-headline font-bold mb-4 bg-gradient-to-r from-white via-white to-accent bg-clip-text text-transparent leading-tight">
-                  Your Story <br/>Shared Globally
+                  Next Gen <br/>Social Streaming
                 </h1>
                 <p className="text-muted-foreground font-body leading-relaxed mb-8 text-lg">
-                  Join a community of thousands of creators sharing their world, building connections, 
-                  and defining the next generation of social streaming.
+                  Powered by Backblaze B2. Experience zero-friction transmission discovery across the global social mesh.
                 </p>
-                <button className="px-8 py-3 rounded-xl bg-accent text-background font-headline font-bold hover:neon-glow transition-all flex items-center gap-2 group">
-                  <Zap size={18} className="fill-background" />
-                  DISCOVER CREATORS
-                </button>
               </div>
             </div>
           )}
@@ -122,16 +102,15 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <TrendingUp className="text-accent" size={24} />
               <h2 className="text-xl font-headline font-bold">
-                {selectedCategory === "All" ? "Hot on AlgoTube" : `${selectedCategory} Videos`}
+                {selectedCategory === "All" ? "Hot on the Mesh" : `${selectedCategory} Transmissions`}
               </h2>
             </div>
           </div>
 
           {isLoading ? (
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-12">
-               {[1,2,3,4,5,6,7,8].map(i => (
-                 <div key={i} className="aspect-video rounded-2xl bg-white/5 animate-pulse border border-white/5" />
-               ))}
+             <div className="flex flex-col items-center justify-center py-24 gap-4 opacity-50">
+               <Loader2 className="animate-spin text-accent" size={40} />
+               <p className="font-code text-xs tracking-widest uppercase">Syncing with B2 Registry...</p>
              </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-12">
@@ -140,33 +119,8 @@ export default function Home() {
               ))}
             </div>
           )}
-
-          {user && selectedCategory === "All" && trendingVideos.length > 0 && (
-            <>
-              <div className="mb-6 flex items-center gap-3">
-                <Sparkles className="text-accent" size={24} />
-                <h2 className="text-xl font-headline font-bold">Personalized for {user.displayName || "You"}</h2>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-12">
-                {[...trendingVideos].reverse().slice(0, 4).map((video) => (
-                  <VideoCard key={video.id + '_rec'} video={video as any} />
-                ))}
-              </div>
-            </>
-          )}
         </main>
       </div>
-
-      <style jsx global>{`
-        .no-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .no-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-      `}</style>
     </div>
   );
 }
