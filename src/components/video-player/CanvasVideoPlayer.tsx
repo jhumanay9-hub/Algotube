@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 
 interface CanvasVideoPlayerProps {
-  src: string;
+  src: string | null;
   poster?: string;
 }
 
@@ -49,18 +49,27 @@ export default function CanvasVideoPlayer({ src, poster }: CanvasVideoPlayerProp
       animationId = requestAnimationFrame(drawFrame);
     };
 
-    video.addEventListener('play', () => {
+    const handlePlay = () => {
       setIsPlaying(true);
       drawFrame();
-    });
+    };
 
-    video.addEventListener('pause', () => setIsPlaying(false));
+    const handlePause = () => setIsPlaying(false);
     
-    video.addEventListener('timeupdate', () => {
+    const handleTimeUpdate = () => {
       setProgress((video.currentTime / video.duration) * 100);
-    });
+    };
 
-    return () => cancelAnimationFrame(animationId);
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('timeupdate', handleTimeUpdate);
+
+    return () => {
+      cancelAnimationFrame(animationId);
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+    };
   }, [quality]);
 
   const togglePlay = () => {
@@ -86,7 +95,7 @@ export default function CanvasVideoPlayer({ src, poster }: CanvasVideoPlayerProp
     >
       <video
         ref={videoRef}
-        src={src}
+        src={src || undefined}
         className="hidden"
         crossOrigin="anonymous"
       />

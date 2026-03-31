@@ -126,7 +126,7 @@ export default function VideoDetailPage() {
                   <p className="text-[10px] font-code text-accent uppercase">Syncing B2 Stream...</p>
                 </div>
               ) : (
-                <CanvasVideoPlayer src={streamUrl || ""} />
+                <CanvasVideoPlayer src={streamUrl} />
               )}
             </div>
             
