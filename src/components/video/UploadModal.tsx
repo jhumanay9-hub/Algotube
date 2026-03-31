@@ -79,7 +79,6 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
         };
 
         xhr.onerror = () => {
-          // This specific error usually indicates a CORS failure or network block
           const corsHint = "Network interruption. Ensure your B2 Bucket CORS allows 'PUT' from this origin.";
           reject(new Error(corsHint));
         };
@@ -116,7 +115,8 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
       setIsProcessing(false);
     } catch (error: any) {
       console.error('B2 Upload Mesh Failure:', error);
-      setUploadError(error.message || "An unexpected error occurred during the transmission.");
+      const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred during the transmission.";
+      setUploadError(errorMessage);
       setIsProcessing(false);
     }
   };
@@ -124,7 +124,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="glass-panel border-white/10 bg-black/80 backdrop-blur-2xl text-foreground max-w-xl p-0 overflow-hidden">
-        <div className="p-8">
+        <div className="p-8 max-h-[90vh] overflow-y-auto custom-scrollbar">
           <DialogHeader className="mb-6">
             <DialogTitle className="text-2xl font-headline font-bold flex items-center gap-2">
               <Upload className="text-accent" /> B2 Mesh Transmission
@@ -158,7 +158,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
               </div>
             </div>
           ) : (
-            <form onSubmit={handleUpload} className="space-y-6">
+            <form onSubmit={handleUpload} className="space-y-6 pb-2">
               <div 
                 onClick={() => fileInputRef.current?.click()} 
                 className={cn(
@@ -174,9 +174,9 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
                   accept=".mp4,.mov,.webm" 
                 />
                 {selectedFile ? (
-                  <div className="flex flex-col items-center gap-2">
+                  <div className="flex flex-col items-center gap-2 text-center">
                     <FileVideo size={32} className="text-accent" />
-                    <span className="font-code text-xs font-bold text-accent">{selectedFile.name}</span>
+                    <span className="font-code text-xs font-bold text-accent line-clamp-1">{selectedFile.name}</span>
                     <span className="text-[10px] opacity-50">{(selectedFile.size / (1024 * 1024)).toFixed(2)} MB</span>
                   </div>
                 ) : (
@@ -199,6 +199,21 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
               </div>
 
               <div className="space-y-2">
+                <Label>Category</Label>
+                <select 
+                  value={category} 
+                  onChange={e => setCategory(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:border-accent/50 outline-none text-foreground appearance-none"
+                >
+                  <option value="Social Media" className="bg-background">Social Media</option>
+                  <option value="Entertainment" className="bg-background">Entertainment</option>
+                  <option value="Computer Science" className="bg-background">Computer Science</option>
+                  <option value="Physics" className="bg-background">Physics</option>
+                  <option value="Cybersecurity" className="bg-background">Cybersecurity</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
                 <Label>Description</Label>
                 <Textarea 
                   placeholder="Contextual metadata for the community..." 
@@ -208,7 +223,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
                 />
               </div>
 
-              <div className="pt-4 flex justify-end gap-3">
+              <div className="pt-4 flex justify-end gap-3 sticky bottom-0 bg-transparent py-2">
                 <Button type="button" variant="ghost" onClick={onClose} className="rounded-xl">Abort</Button>
                 <Button 
                   type="submit" 
