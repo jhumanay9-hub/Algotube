@@ -7,11 +7,11 @@ const accessKeyId = process.env.BACKBLAZE_KEY_ID;
 const secretAccessKey = process.env.BACKBLAZE_APPLICATION_KEY;
 
 if (!accessKeyId || !secretAccessKey || !endpoint) {
-  console.warn('S3 Client: Missing Backblaze configuration. S3 features will be unavailable.');
+  console.warn('S3 Client: Missing Backblaze configuration in .env. S3 features will be unavailable.');
 }
 
 export const s3Client = new S3Client({
-  endpoint,
+  endpoint: endpoint?.startsWith('http') ? endpoint : `https://${endpoint}`,
   region,
   credentials: {
     accessKeyId: accessKeyId || '',
