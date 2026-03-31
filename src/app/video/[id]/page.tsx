@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { personalizeVideoRecommendations, PersonalizedVideoRecommendationsOutput } from '@/ai/flows/personalized-video-recommendations-flow';
 import { toggleSubscription, addToHistory } from '@/firebase/social-logic';
+import { useS3Url } from '@/hooks/use-s3-url';
 import { cn } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -34,7 +35,15 @@ export default function VideoDetailPage() {
 
   const { data: video, isLoading: isVideoLoading } = useDoc(videoRef);
   
-  const creatorId = video?.uploaderId || (MOCK_VIDEOS.find(v => v.id === id) as any)?.uploaderId || "system_mock";
+  const displayVideo = video || MOCK_VIDEOS.find(v => v.id === id) || MOCK_VIDEOS[0];
+  const creatorId = displayVideo.uploaderId || (displayVideo as any).uploaderId || "system_mock";
+
+  // S3 URL resolution for Backblaze B2 playback
+  const s3Key = (displayVideo as any).s3Key || (displayVideo as any).videoUrl;
+  const { url: streamUrl, isLoading: isStreamLoading } = useS3Url(
+    s3Key, 
+    (displayVideo as any).videoUrl // Fallback to original URL
+  );
 
   const subRef = useMemoFirebase(() => {
     if (!firestore || !user || !creatorId) return null;
@@ -45,8 +54,6 @@ export default function VideoDetailPage() {
   const isSubscribed = !!subscription;
 
   const [recommendations, setRecommendations] = useState<PersonalizedVideoRecommendationsOutput | null>(null);
-
-  const displayVideo = video || MOCK_VIDEOS.find(v => v.id === id) || MOCK_VIDEOS[0];
 
   useEffect(() => {
     if (user && firestore && id) {
@@ -75,19 +82,7 @@ export default function VideoDetailPage() {
   }, [id, user, displayVideo]);
 
   const handleInteraction = async (type: 'like' | 'dislike') => {
-    if (isUserLoading) return;
-    
-    if (!user) {
-      window.dispatchEvent(new CustomEvent('auth-required-glow'));
-      toast({ 
-        variant: "destructive",
-        title: "Auth Required", 
-        description: "Sign in to define the stance on this transmission." 
-      });
-      return;
-    }
-
-    if (!firestore || !id || !videoRef) return;
+    if (isUserLoading || !user || !firestore || !id || !videoRef) return;
 
     const interactionRef = doc(firestore, 'userProfiles', user.uid, 'videoInteractions', `${id}_${type}`);
 
@@ -104,11 +99,11 @@ export default function VideoDetailPage() {
             id: id,
             title: displayVideo.title,
             description: (displayVideo as any).description || displayVideo.title,
-            videoUrl: (displayVideo as any).videoUrl || "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-            thumbnailUrl: (displayVideo as any).thumbnailUrl || displayVideo.thumbnail,
+            videoUrl: (displayVideo as any).videoUrl,
+            thumbnailUrl: (displayVideo as any).thumbnailUrl || (displayVideo as any).thumbnail,
             uploaderId: creatorId,
             uploadDate: serverTimestamp(),
-            viewsCount: (displayVideo as any).viewsCount || displayVideo.views,
+            viewsCount: (displayVideo as any).viewsCount || (displayVideo as any).views,
             likesCount: type === 'like' ? 1 : 0,
             dislikesCount: type === 'dislike' ? 1 : 0,
             commentsCount: 0,
@@ -116,7 +111,8 @@ export default function VideoDetailPage() {
             processingStatus: 'ready',
             category: (displayVideo as any).category || "General",
             tags: displayVideo.tags,
-            creator: displayVideo.creator
+            creator: displayVideo.creator,
+            s3Key: (displayVideo as any).s3Key || null
           });
         } else {
           transaction.update(videoRef, {
@@ -135,7 +131,7 @@ export default function VideoDetailPage() {
       toast({ title: "Success!", description: `Transmission ${type}d.` });
     } catch (e: any) {
       if (e === "ALREADY_INTERACTED") {
-        toast({ title: "Already Interacted", description: `You have already recorded your stance.` });
+        toast({ title: "Already Interacted" });
       } else {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
           path: videoRef.path,
@@ -147,63 +143,34 @@ export default function VideoDetailPage() {
   };
 
   const handleSubscribe = async () => {
-    if (isUserLoading) return;
-
-    if (!user) {
-      window.dispatchEvent(new CustomEvent('auth-required-glow'));
-      toast({ 
-        variant: "destructive",
-        title: "Action Required", 
-        description: "Sign in to subscribe to creators." 
-      });
-      return;
-    }
-
-    if (!firestore || !creatorId) return;
-
+    if (isUserLoading || !user || !firestore || !creatorId) return;
     await toggleSubscription(firestore, user.uid, creatorId, isSubscribed);
-    
-    toast({
-      title: isSubscribed ? "Unsubscribed" : "Subscribed",
-      description: isSubscribed ? "Creator removed from your mesh." : "Creator added to your mesh.",
-    });
-  };
-
-  const handleShare = async () => {
-    if (!firestore || !id || !videoRef) return;
-    
-    const shareUrl = window.location.href;
-    await navigator.clipboard.writeText(shareUrl);
-    
-    setDoc(videoRef, { shareCount: increment(1) }, { merge: true });
-
-    toast({
-      title: "URL Copied",
-      description: "Mesh access point shared to clipboard.",
-    });
+    toast({ title: isSubscribed ? "Unsubscribed" : "Subscribed" });
   };
 
   return (
     <div className="flex flex-col h-screen overflow-hidden relative">
       <Navbar />
 
-      {isUserLoading && (
-        <div className="absolute inset-0 z-[100] bg-background/50 backdrop-blur-md flex flex-col items-center justify-center gap-4">
-          <div className="w-16 h-16 border-4 border-accent/20 border-t-accent rounded-full animate-spin shadow-[0_0_20px_rgba(116,222,236,0.2)]" />
-          <p className="font-code text-xs text-accent animate-pulse uppercase tracking-[0.2em]">Syncing Mesh Identity...</p>
-        </div>
-      )}
-
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
 
         <main className="flex-1 overflow-y-auto p-4 pt-0 custom-scrollbar flex gap-4">
           <div className="flex-1 flex flex-col gap-6">
-            <CanvasVideoPlayer src={(displayVideo as any).videoUrl || "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"} />
+            <div className="relative aspect-video bg-black rounded-2xl overflow-hidden ring-1 ring-white/10 shadow-2xl">
+              {isStreamLoading ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-xl z-20 gap-4">
+                  <div className="w-16 h-16 border-4 border-accent/20 border-t-accent rounded-full animate-spin shadow-[0_0_20px_rgba(116,222,236,0.2)]" />
+                  <p className="font-code text-xs text-accent animate-pulse uppercase tracking-[0.2em]">Resolving S3 Mesh Stream...</p>
+                </div>
+              ) : (
+                <CanvasVideoPlayer src={streamUrl || "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"} />
+              )}
+            </div>
             
             <div className="glass-panel rounded-2xl p-6 relative">
               <div className="absolute top-6 right-6 flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-[10px] text-accent font-code">
-                <ShieldCheck size={12} /> AI VERIFIED CONTENT
+                <ShieldCheck size={12} /> B2 PROTECTED TRANSMISSION
               </div>
               
               <h1 className="text-2xl font-headline font-bold mb-4 pr-32">{displayVideo.title}</h1>
@@ -226,65 +193,33 @@ export default function VideoDetailPage() {
                     disabled={isUserLoading}
                     className={cn(
                       "ml-4 rounded-xl font-headline font-bold transition-all duration-300",
-                      isSubscribed 
-                        ? "bg-accent/10 text-accent border border-accent/40 shadow-[0_0_15px_rgba(116,222,236,0.2)]" 
-                        : "bg-white text-black hover:bg-white/90"
+                      isSubscribed ? "bg-accent/10 text-accent border border-accent/40" : "bg-white text-black hover:bg-white/90"
                     )}
                   >
-                    {isUserLoading ? <Loader2 className="animate-spin" size={16} /> : isSubscribed ? <><UserCheck className="mr-2" size={16} /> SUBSCRIBED</> : <><UserPlus className="mr-2" size={16} /> SUBSCRIBE</>}
+                    {isSubscribed ? "SUBSCRIBED" : "SUBSCRIBE"}
                   </Button>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center bg-white/5 rounded-xl border border-white/10 p-1">
-                    <Button 
-                      variant="ghost" 
-                      onClick={() => handleInteraction('like')}
-                      disabled={isUserLoading}
-                      className="rounded-l-lg hover:bg-accent/10 hover:text-accent gap-2 px-4 h-9 group/btn transition-all"
-                    >
-                      <ThumbsUp size={16} className="group-hover/btn:scale-110" /> {(displayVideo as any).likesCount || 0}
-                    </Button>
-                    <div className="w-px h-6 bg-white/10" />
-                    <Button 
-                      variant="ghost" 
-                      onClick={() => handleInteraction('dislike')}
-                      disabled={isUserLoading}
-                      className="rounded-r-lg hover:bg-destructive/10 hover:text-destructive h-9 px-4 group/btn transition-all"
-                    >
-                      <ThumbsDown size={16} className="group-hover/btn:scale-110" />
-                    </Button>
-                  </div>
-                  <Button 
-                    variant="ghost" 
-                    onClick={handleShare}
-                    className="bg-white/5 border border-white/10 rounded-xl gap-2 hover:bg-accent/10 hover:text-accent hover:border-accent/40 h-11 px-4 transition-all"
-                  >
+                  <Button variant="ghost" onClick={() => handleInteraction('like')} className="bg-white/5 rounded-xl border border-white/10 gap-2 px-4 h-11">
+                    <ThumbsUp size={16} /> {(displayVideo as any).likesCount || 0}
+                  </Button>
+                  <Button variant="ghost" onClick={() => {}} className="bg-white/5 border border-white/10 rounded-xl gap-2 h-11 px-4">
                     <Share2 size={16} /> Share
                   </Button>
                 </div>
               </div>
 
-              <div className="bg-white/5 rounded-xl p-5 font-body text-sm text-foreground/80 leading-relaxed border border-white/5">
+              <div className="bg-white/5 rounded-xl p-5 font-body text-sm border border-white/5">
                 <div className="flex gap-4 mb-4 font-bold text-foreground items-center">
-                  <span className="flex items-center gap-1.5 text-accent bg-accent/5 px-2 py-1 rounded-md border border-accent/10">
-                    <Eye size={14}/> {(displayVideo as any).viewsCount || displayVideo.views} views
+                  <span className="flex items-center gap-1.5 text-accent">
+                    <Eye size={14}/> {(displayVideo as any).viewsCount || (displayVideo as any).views} views
                   </span>
-                  <span className="text-muted-foreground text-xs">{(displayVideo as any).uploadDate ? new Date((displayVideo as any).uploadDate.seconds * 1000).toLocaleDateString() : "Live Archive"}</span>
                 </div>
-                
-                {(displayVideo as any).aiSummary && (
-                  <div className="mb-4 p-3 rounded-lg bg-accent/5 border-l-2 border-accent italic text-xs">
-                    <Sparkles size={12} className="inline mr-2 text-accent" />
-                    {(displayVideo as any).aiSummary}
-                  </div>
-                )}
-                
                 <p className="mb-4">{(displayVideo as any).description || "No transmission description available."}</p>
-                
                 <div className="mt-4 flex flex-wrap gap-2">
                   {displayVideo.tags?.map(t => (
-                    <span key={t} className="px-3 py-1 rounded-md bg-white/5 text-accent font-code text-[10px] hover:bg-accent/10 transition-colors cursor-default border border-white/5">
+                    <span key={t} className="px-3 py-1 rounded-md bg-white/5 text-accent font-code text-[10px] border border-white/5">
                       #{t}
                     </span>
                   ))}
@@ -293,24 +228,13 @@ export default function VideoDetailPage() {
             </div>
 
             <div className="mb-10">
-              <h3 className="text-lg font-headline font-bold mb-6 flex items-center gap-2">
-                <Sparkles className="text-accent" size={20} />
-                SEMANTIC MATCHES
+              <h3 className="text-lg font-headline font-bold mb-6 flex items-center gap-2 text-accent">
+                <Sparkles size={20} /> SEMANTIC MATCHES
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {recommendations?.recommendedVideos.map(rec => {
                   const v = MOCK_VIDEOS.find(mv => mv.id === rec.id) || MOCK_VIDEOS[0];
-                  return (
-                    <div key={rec.id} className="relative group/rec">
-                      <VideoCard video={v} />
-                      <div className="absolute inset-0 bg-accent/20 opacity-0 group-hover/rec:opacity-100 transition-all rounded-2xl flex items-center justify-center p-4 pointer-events-none">
-                        <div className="bg-background/90 p-3 rounded-xl border border-accent/40 text-[10px] font-headline font-bold text-center translate-y-2 group-hover/rec:translate-y-0 transition-transform">
-                          <p className="text-accent mb-1 uppercase tracking-tighter">AI Insight</p>
-                          <p className="text-foreground/90">{rec.reason}</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
+                  return <VideoCard key={rec.id} video={v} />;
                 })}
               </div>
             </div>

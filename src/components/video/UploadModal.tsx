@@ -7,12 +7,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, Loader2, FileVideo, Music, Sparkles, AlertCircle } from 'lucide-react';
-import { useFirestore, useUser, useStorage } from '@/firebase';
+import { Upload, Loader2, FileVideo, Music, Sparkles } from 'lucide-react';
+import { useFirestore, useUser } from '@/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { useToast } from '@/hooks/use-toast';
 import { analyzeVideoContent } from '@/ai/flows/analyze-video-content-flow';
+import { getPresignedUploadUrl } from '@/app/actions/s3-actions';
 import { cn } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -74,7 +74,6 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const firestore = useFirestore();
-  const storage = useStorage();
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
@@ -98,100 +97,66 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    console.log('[TRANSMISSION DEBUGGER] Phase 1: Init Validation');
-
-    if (isUserLoading) {
-      console.warn('[TRANSMISSION DEBUGGER] Stall: Auth is still loading.');
+    if (isUserLoading || !user) {
+      toast({ variant: "destructive", title: "Sign In Required" });
       return;
     }
 
-    if (!user) {
-      console.error('[TRANSMISSION DEBUGGER] Error: No user session found.');
-      toast({
-        variant: "destructive",
-        title: "Sign In Required",
-        description: "You must be logged in to post videos to the community.",
-      });
-      return;
-    }
-
-    const isInvalid = !title.trim() || !category || !selectedFile;
-    if (isInvalid) {
-      console.error('[TRANSMISSION DEBUGGER] Error: Missing required fields (Title/Category/File).');
+    if (!title.trim() || !category || !selectedFile) {
       setShowErrors(true);
-      toast({
-        variant: "destructive",
-        title: "Missing Information",
-        description: "Please provide a title, category, and select a media file.",
-      });
       return;
-    }
-
-    if (!firestore || !storage) {
-       console.error('[TRANSMISSION DEBUGGER] Critical: Firebase services (Firestore/Storage) not initialized.');
-       toast({ variant: "destructive", title: "Config Error", description: "Firebase storage or database is missing." });
-       return;
     }
 
     setIsProcessing(true);
     setUploadProgress(0);
     
     try {
-      console.log('[TRANSMISSION DEBUGGER] Phase 2: Starting Parallel Execution');
-      
-      const mediaType = selectedFile.type.startsWith('video') ? 'videos' : 'audio';
       const fileName = `${Date.now()}-${selectedFile.name.replace(/\s+/g, '_')}`;
-      const storagePath = `users/${user.uid}/${mediaType}/${fileName}`;
-      const storageRef = ref(storage, storagePath);
-
-      console.log('[TRANSMISSION DEBUGGER] Target path:', storagePath);
-
-      // 1. Parallel Start: AI Analysis & Media Upload
-      const aiPromise = analyzeVideoContent({ title, description });
       
-      const uploadTask = uploadBytesResumable(storageRef, selectedFile);
-      const uploadPromise = new Promise<string>((resolve, reject) => {
-        uploadTask.on(
-          'state_changed',
-          (snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            console.log(`[TRANSMISSION DEBUGGER] Upload Progress: ${Math.round(progress)}%`);
-            setUploadProgress(progress);
-          },
-          (error) => {
-            console.error('[TRANSMISSION DEBUGGER] Storage Error:', error.code, error.message);
-            reject(error);
-          },
-          async () => {
-            console.log('[TRANSMISSION DEBUGGER] Upload Complete. Fetching URL...');
-            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-            resolve(downloadUrl);
-          }
-        );
-      });
+      // 1. Parallel Start: AI Analysis & Presigned URL Generation
+      const aiPromise = analyzeVideoContent({ title, description });
+      const uploadAuthPromise = getPresignedUploadUrl(fileName, selectedFile.type);
 
-      // 2. Wait for both to finish
-      const [downloadUrl, aiResult] = await Promise.all([uploadPromise, aiPromise]);
-      console.log('[TRANSMISSION DEBUGGER] Phase 3: AI Analysis Results Received');
+      const [uploadAuth, aiResult] = await Promise.all([uploadAuthPromise, aiPromise]);
 
       if (!aiResult.isSafe) {
-        console.error('[TRANSMISSION DEBUGGER] Rejected: Safety Audit Failed.', aiResult.safetyReason);
-        toast({
-          variant: "destructive",
-          title: "Safety Flag",
-          description: `Post rejected: ${aiResult.safetyReason || 'Community guideline violation'}`,
-        });
+        toast({ variant: "destructive", title: "Safety Flag", description: aiResult.safetyReason });
         setIsProcessing(false);
         return;
       }
 
-      console.log('[TRANSMISSION DEBUGGER] Phase 4: Constructing Document');
+      // 2. Perform the actual upload to Backblaze using XMLHttpRequest to track progress
+      const uploadPromise = new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('PUT', uploadAuth.url);
+        xhr.setRequestHeader('Content-Type', selectedFile.type);
 
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            setUploadProgress((event.loaded / event.total) * 100);
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status === 200 || xhr.status === 204) {
+            resolve();
+          } else {
+            reject(new Error(`B2 Upload Failed: ${xhr.statusText}`));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error('Network Error during B2 Upload'));
+        xhr.send(selectedFile);
+      });
+
+      await uploadPromise;
+
+      // 3. Construct and Save Firestore Document
       const videoData = {
         title,
         description,
         aiSummary: aiResult.summary,
-        videoUrl: downloadUrl,
+        videoUrl: fileName, // Store the KEY, not the full URL
         thumbnailUrl: `https://picsum.photos/seed/${Math.floor(Math.random() * 1000)}/640/360`,
         uploaderId: user.uid,
         uploadDate: serverTimestamp(),
@@ -206,54 +171,31 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
         tags: aiResult.seoTags,
         duration: 15,
         aspectRatio: (selectedFile.size < 50 * 1024 * 1024) ? "9:16" : "16:9",
-        creator: user.displayName || "New Creator"
+        creator: user.displayName || "New Creator",
+        s3Key: fileName,
+        s3Bucket: uploadAuth.bucket
       };
 
-      // 3. Database Entry
-      console.log('[TRANSMISSION DEBUGGER] Phase 5: Committing to Firestore Mesh...');
-      
       addDoc(collection(firestore, 'videos'), videoData)
-        .then((docRef) => {
-          console.log('[TRANSMISSION DEBUGGER] SUCCESS: Video ID:', docRef.id);
-          toast({
-            title: "Post Published!",
-            description: "Your content is now live on the AlgoTube feed.",
-          });
-          
+        .then(() => {
+          toast({ title: "Post Published!" });
+          onClose();
           setTitle('');
           setDescription('');
           setSelectedFile(null);
-          setShowErrors(false);
           setIsProcessing(false);
-          onClose();
         })
-        .catch(async (error) => {
-          console.error('[TRANSMISSION DEBUGGER] Firestore Error:', error.message);
-          
-          const permissionError = new FirestorePermissionError({
+        .catch((err) => {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({
             path: 'videos',
             operation: 'create',
             requestResourceData: videoData
-          });
-
-          // Emit the error so the global listener can catch it
-          errorEmitter.emit('permission-error', permissionError);
-          
-          toast({
-            variant: "destructive",
-            title: "Publish Failed",
-            description: "Permission denied by the mesh. Check the debugger overlay.",
-          });
+          }));
           setIsProcessing(false);
         });
 
     } catch (error: any) {
-      console.error('[TRANSMISSION DEBUGGER] General Catch Block:', error.message);
-      toast({
-        variant: "destructive",
-        title: "Transmission Failed",
-        description: error.message || "An unexpected error occurred during the transmission.",
-      });
+      toast({ variant: "destructive", title: "Transmission Failed", description: error.message });
       setIsProcessing(false);
     }
   };
@@ -267,7 +209,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
               <Upload className="text-accent" /> Share Your Story
             </DialogTitle>
             <DialogDescription className="text-muted-foreground font-body">
-              Upload your high-fidelity content to the AlgoTube creator community.
+              Upload your high-fidelity content to the AlgoTube community.
             </DialogDescription>
           </DialogHeader>
 
@@ -275,12 +217,12 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
             <div className="flex flex-col items-center justify-center py-12 gap-6">
               <CircularProgress 
                 progress={uploadProgress} 
-                label={uploadProgress < 100 ? `Broadcasting: ${Math.round(uploadProgress)}%` : "AI Optimization in progress..."} 
+                label={uploadProgress < 100 ? `Broadcasting: ${Math.round(uploadProgress)}%` : "Finalizing Transmission..."} 
               />
               <div className="flex flex-col items-center gap-2 animate-pulse text-center px-8">
                 <Sparkles size={20} className="text-accent" />
                 <p className="text-[10px] text-accent font-code font-bold uppercase tracking-widest">
-                  {uploadProgress < 100 ? "Sending Data to Mesh" : "Processing Semantic Insights"}
+                  Backblaze B2 Storage Node: CONNECTED
                 </p>
               </div>
             </div>
@@ -290,110 +232,54 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
                 onClick={() => fileInputRef.current?.click()}
                 className={cn(
                   "border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-white/5 transition-all group",
-                  showErrors && !selectedFile 
-                    ? "border-destructive shadow-[0_0_15px_rgba(239,68,68,0.2)]" 
-                    : "border-white/10 hover:border-accent/40"
+                  showErrors && !selectedFile ? "border-destructive" : "border-white/10 hover:border-accent/40"
                 )}
               >
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleFileChange} 
-                  className="hidden" 
-                  accept=".mp4,.mov,.mp3,.wav"
-                />
+                <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".mp4,.mov,.mp3,.wav" />
                 {selectedFile ? (
                   <>
                     <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center text-accent">
-                      {selectedFile.type.startsWith('video') ? <FileVideo size={24} /> : <Music size={24} />}
+                      <FileVideo size={24} />
                     </div>
                     <span className="text-sm font-code text-accent font-bold truncate max-w-full px-4">{selectedFile.name}</span>
-                    <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedFile(null); }} className="text-xs text-muted-foreground hover:text-destructive">
-                      Change File
-                    </Button>
                   </>
                 ) : (
-                  <>
-                    <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center group-hover:neon-glow transition-all">
-                      <Upload className="text-muted-foreground group-hover:text-accent" />
-                    </div>
-                    <div className="text-center">
-                      <p className="text-sm font-bold">Select video or audio</p>
-                      <p className="text-[10px] text-muted-foreground mt-1">MP4, MOV, MP3, WAV (Max 100MB)</p>
-                    </div>
-                  </>
+                  <div className="text-center">
+                    <Upload className="mx-auto mb-2 text-muted-foreground group-hover:text-accent" />
+                    <p className="text-sm font-bold">Select media file</p>
+                  </div>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label className={cn(showErrors && !title.trim() && "text-destructive")}>Post Title</Label>
-                <Input 
-                  placeholder="What's this about?" 
-                  value={title} 
-                  onChange={e => setTitle(e.target.value)}
-                  className={cn(
-                    "bg-white/5 border-white/10 focus:border-accent",
-                    showErrors && !title.trim() && "border-destructive shadow-[0_0_10px_rgba(239,68,68,0.2)]"
-                  )}
-                />
+                <Label>Post Title</Label>
+                <Input placeholder="What's this about?" value={title} onChange={e => setTitle(e.target.value)} className="bg-white/5 border-white/10" />
               </div>
 
               <div className="space-y-2">
                 <Label>Description</Label>
-                <Textarea 
-                  placeholder="Tell your viewers more about this..." 
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                  className="bg-white/5 border-white/10 focus:border-accent min-h-[100px] custom-scrollbar"
-                />
+                <Textarea placeholder="Tell your viewers more..." value={description} onChange={e => setDescription(e.target.value)} className="bg-white/5 border-white/10" />
               </div>
 
               <div className="space-y-2">
-                <Label className={cn(showErrors && !category && "text-destructive")}>Category</Label>
-                <select 
-                  className={cn(
-                    "flex h-10 w-full rounded-md border border-white/10 bg-white/10 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent appearance-none",
-                    showErrors && !category && "border-destructive shadow-[0_0_10px_rgba(239,68,68,0.2)]"
-                  )}
-                  value={category}
-                  onChange={e => setCategory(e.target.value)}
-                >
-                  <option value="" disabled>Choose a Category</option>
-                  {["Social Media", "Entertainment", "Social Life", "Tech", "Computer Science", "Physics", "Music", "Vlogs"].map(c => (
-                    <option key={c} value={c} className="bg-background text-foreground">{c}</option>
+                <Label>Category</Label>
+                <select className="flex h-10 w-full rounded-md border border-white/10 bg-white/10 px-3 py-2 text-sm" value={category} onChange={e => setCategory(e.target.value)}>
+                  {["Social Media", "Entertainment", "Tech", "Music", "Vlogs"].map(c => (
+                    <option key={c} value={c} className="bg-background">{c}</option>
                   ))}
                 </select>
               </div>
 
-              <div className="pt-4 flex flex-col sm:flex-row items-center justify-end gap-4 border-t border-white/5 sticky bottom-0 bg-black/50 backdrop-blur-md pb-2">
-                <div className="flex gap-3 w-full sm:w-auto">
-                  <Button type="button" variant="ghost" onClick={onClose} className="flex-1 sm:flex-none hover:bg-white/10">Cancel</Button>
-                  <Button 
-                    type="submit" 
-                    className="flex-1 sm:flex-none bg-accent text-background hover:neon-glow font-bold shadow-[0_0_15px_rgba(116,222,236,0.3)]"
-                    disabled={isProcessing}
-                  >
-                    {isProcessing ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2" size={16} />}
-                    PUBLISH POST
-                  </Button>
-                </div>
+              <div className="pt-4 flex justify-end gap-3">
+                <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+                <Button type="submit" className="bg-accent text-background hover:neon-glow font-bold" disabled={isProcessing}>
+                  {isProcessing ? <Loader2 className="animate-spin" /> : "PUBLISH POST"}
+                </Button>
               </div>
             </form>
           )}
         </div>
       </DialogContent>
-      <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(116, 222, 236, 0.15);
-          border-radius: 10px;
-        }
-      `}</style>
     </Dialog>
   );
 }

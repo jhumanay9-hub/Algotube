@@ -2,9 +2,10 @@
 "use client";
 
 import React from 'react';
-import { Play, MoreVertical, Eye, Clock } from 'lucide-react';
+import { Play, MoreVertical, Eye, Clock, Loader2 } from 'lucide-react';
 import { VideoMetadata } from '@/lib/sorting';
 import Link from 'next/link';
+import { useS3Url } from '@/hooks/use-s3-url';
 
 interface VideoCardProps {
   video: VideoMetadata;
@@ -15,14 +16,18 @@ export default function VideoCard({ video }: VideoCardProps) {
     ? (video.views / 1000000).toFixed(1) + 'M' 
     : (video.views / 1000).toFixed(0) + 'K';
 
-  // Support both mock and firestore uploader ID formats
   const uploaderId = (video as any).uploaderId || video.id;
+  const s3Key = (video as any).s3Key || (video as any).videoUrl; // Fallback to videoUrl if key not explicit
+
+  // Resolve the URL for the preview (if we want to use B2 for thumbnails or just use the mock ones)
+  // For now, let's just use the mock thumbnail provided in the video object
+  const thumbnail = video.thumbnail || `https://picsum.photos/seed/${video.id}/600/400`;
 
   return (
     <div className="glass-card rounded-2xl overflow-hidden h-full flex flex-col group">
       <Link href={`/video/${video.id}`} className="block relative aspect-video overflow-hidden">
         <img 
-          src={video.thumbnail} 
+          src={thumbnail} 
           alt={video.title} 
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
@@ -30,9 +35,6 @@ export default function VideoCard({ video }: VideoCardProps) {
           <div className="w-12 h-12 rounded-full bg-accent/20 border border-accent/40 flex items-center justify-center">
             <Play size={24} className="text-accent fill-accent translate-x-0.5" />
           </div>
-        </div>
-        <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/60 text-[10px] font-code text-white backdrop-blur-md">
-          12:42
         </div>
       </Link>
 
@@ -65,14 +67,6 @@ export default function VideoCard({ video }: VideoCardProps) {
           <span className="flex items-center gap-1">
             <Clock size={12} /> 2 days ago
           </span>
-        </div>
-
-        <div className="flex flex-wrap gap-1 mt-3">
-          {video.tags.slice(0, 2).map(tag => (
-            <span key={tag} className="px-2 py-0.5 rounded-full bg-white/5 border border-white/5 text-[9px] text-accent font-code">
-              #{tag}
-            </span>
-          ))}
         </div>
       </div>
     </div>
