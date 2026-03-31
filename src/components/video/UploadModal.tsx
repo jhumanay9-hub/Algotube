@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, Loader2, FileVideo, ShieldAlert, DatabaseZap, AlertCircle, Info, Zap } from 'lucide-react';
+import { Upload, Loader2, FileVideo, ShieldAlert, DatabaseZap, AlertCircle, Zap } from 'lucide-react';
 import { useUser } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { analyzeVideoContent } from '@/ai/flows/analyze-video-content-flow';
@@ -66,8 +66,6 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
       const uploadPromise = new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('PUT', uploadAuth.url);
-        
-        // CRITICAL: Content-Type must match the presigned URL signature
         xhr.setRequestHeader('Content-Type', selectedFile.type);
         
         xhr.upload.onprogress = (e) => {
@@ -80,14 +78,12 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve();
           } else {
-            const errorMsg = `B2 Node rejected stream (Status ${xhr.status}). Ensure Bucket CORS allows PUT.`;
-            reject(new Error(errorMsg));
+            reject(new Error(`B2 Node rejected stream with status ${xhr.status}. Check CORS config.`));
           }
         };
 
         xhr.onerror = () => {
-          const corsHint = "Network interruption (likely CORS). Ensure your B2 Bucket CORS allows 'PUT' from this origin.";
-          reject(new Error(corsHint));
+          reject(new Error("Network interruption (likely CORS). Ensure your B2 Bucket CORS allows 'PUT' from this origin."));
         };
 
         xhr.send(selectedFile);
