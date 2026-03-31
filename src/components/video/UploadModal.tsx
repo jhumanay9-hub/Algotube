@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, Loader2, FileVideo, ShieldAlert, DatabaseZap, AlertCircle } from 'lucide-react';
+import { Upload, Loader2, FileVideo, ShieldAlert, DatabaseZap, AlertCircle, Info } from 'lucide-react';
 import { useUser } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { analyzeVideoContent } from '@/ai/flows/analyze-video-content-flow';
@@ -79,7 +79,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
         };
 
         xhr.onerror = () => {
-          const corsHint = "Network interruption. Ensure your B2 Bucket CORS allows 'PUT' from this origin.";
+          const corsHint = "Network interruption (likely CORS). Ensure your B2 Bucket CORS allows 'PUT' from this origin.";
           reject(new Error(corsHint));
         };
 
@@ -115,11 +115,13 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
       setIsProcessing(false);
     } catch (error: any) {
       console.error('B2 Upload Mesh Failure:', error);
-      const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred during the transmission.";
+      const errorMessage = error?.message || "An unexpected error occurred during the transmission.";
       setUploadError(errorMessage);
       setIsProcessing(false);
     }
   };
+
+  const isCorsError = uploadError?.toLowerCase().includes('cors') || uploadError?.toLowerCase().includes('interruption');
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -134,12 +136,24 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
           {uploadError && (
             <Alert variant="destructive" className="mb-6 bg-destructive/10 border-destructive/20 text-destructive-foreground">
               <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Broadcast Failed</AlertTitle>
+              <AlertTitle>Broadcast Failure</AlertTitle>
               <AlertDescription className="text-xs font-body">
                 {uploadError}
-                <div className="mt-2 p-2 bg-black/20 rounded font-code text-[10px] text-white/70">
-                  Tip: In B2 Console, set Bucket CORS to allow 'PUT' for your preview URL.
-                </div>
+                {isCorsError && (
+                  <div className="mt-4 p-3 bg-black/40 rounded-xl border border-destructive/20 space-y-2">
+                    <p className="font-bold flex items-center gap-2 text-white">
+                      <ShieldAlert size={14} className="text-red-400" /> Action Required: CORS Config
+                    </p>
+                    <p className="opacity-80">Your browser blocked the direct upload to Backblaze. To fix this:</p>
+                    <ol className="list-decimal ml-4 opacity-80 space-y-1">
+                      <li>Log in to <span className="text-accent">Backblaze B2 Console</span></li>
+                      <li>Go to <span className="font-bold">Buckets</span> &gt; <span className="font-bold">CORS Settings</span></li>
+                      <li>Add a rule: <span className="font-code text-[10px] bg-white/10 px-1">Allowed Origins: *</span></li>
+                      <li>Allow Methods: <span className="font-code text-[10px] bg-white/10 px-1">PUT, GET</span></li>
+                      <li>Allow Headers: <span className="font-code text-[10px] bg-white/10 px-1">Content-Type, x-amz-*</span></li>
+                    </ol>
+                  </div>
+                )}
               </AlertDescription>
             </Alert>
           )}
