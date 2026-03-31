@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -13,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { analyzeVideoContent } from '@/ai/flows/analyze-video-content-flow';
 import { getPresignedUploadUrl } from '@/app/actions/s3-actions';
 import { registerB2Video } from '@/app/actions/b2-store';
+import { generatePrefixes } from '@/lib/search-utils';
 import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
@@ -78,7 +78,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve();
           } else {
-            reject(new Error(`B2 Node rejected stream with status ${xhr.status}. Check CORS config.`));
+            reject(new Error(`B2 Node rejected stream (Status: ${xhr.status})`));
           }
         };
 
@@ -93,6 +93,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
 
       // Phase 3: Metadata Persistence in B2 Registry
       const isShort = category === 'Shorts' || forcedCategory === 'Shorts';
+      const searchKeywords = generatePrefixes(title);
       const tags = [...aiResult.seoTags];
       if (isShort && !tags.includes('short')) tags.push('short');
 
@@ -111,6 +112,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
         category,
         creator: user.displayName || "Explorer",
         tags,
+        searchKeywords, // Optimization for high-performance search
         s3Key: fileName,
         s3Bucket: uploadAuth.bucket,
         aspectRatio: isShort ? '9:16' : '16:9'
@@ -118,7 +120,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
 
       await registerB2Video(videoData);
 
-      toast({ title: "Broadcast Successful", description: `Transmission persisted to the B2 mesh.` });
+      toast({ title: "Broadcast Successful", description: `Transmission persisted with optimized search indexing.` });
       onClose();
       setIsProcessing(false);
       
@@ -127,7 +129,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
       setSelectedFile(null);
     } catch (error: any) {
       console.error('B2 Upload Mesh Failure:', error);
-      setUploadError(error?.message || "An unexpected error occurred during the transmission.");
+      setUploadError(error?.message || "Transmission interrupted by network security.");
       setIsProcessing(false);
     }
   };
@@ -163,9 +165,9 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
                     <p className="font-bold flex items-center gap-2 text-white">
                       <ShieldAlert size={14} className="text-red-400" /> Action Required: CORS Config
                     </p>
-                    <p className="opacity-80">Your browser blocked the direct upload to Backblaze B2. Please apply this setting in your B2 Console:</p>
+                    <p className="opacity-80">Your browser blocked the direct upload. Apply this setting in your B2 Console:</p>
                     <div className="bg-white/5 p-3 rounded-lg font-code text-[10px] space-y-1">
-                      <p><span className="text-accent">Allowed Origins:</span> * (or your domain)</p>
+                      <p><span className="text-accent">Allowed Origins:</span> *</p>
                       <p><span className="text-accent">Allowed Methods:</span> PUT, GET, POST</p>
                       <p><span className="text-accent">Allowed Headers:</span> Content-Type, x-amz-*, authorization</p>
                       <p><span className="text-accent">Expose Headers:</span> ETag</p>
@@ -269,7 +271,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
               <div className="space-y-2">
                 <Label>Description</Label>
                 <Textarea 
-                  placeholder="Contextual metadata for the community..." 
+                  placeholder="Contextual metadata..." 
                   value={description} 
                   onChange={e => setDescription(e.target.value)} 
                   className="bg-white/5 border-white/10 min-h-[100px] focus:border-accent/50 rounded-xl" 

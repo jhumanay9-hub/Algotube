@@ -1,12 +1,10 @@
-
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Bell, Upload, Shield, LogIn, LogOut, Menu, UserCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Bell, Upload, Shield, LogOut, Menu, UserCircle, Loader2, Zap } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { VideoTrie } from '@/lib/trie';
-import { MOCK_VIDEOS } from '@/app/lib/mock-data';
+import { getB2Videos } from '@/app/actions/b2-store';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useUser, useAuth } from '@/firebase';
@@ -15,11 +13,13 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import Sidebar from './Sidebar';
+import { useSearch } from '@/hooks/use-search';
 import { cn } from '@/lib/utils';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [allVideos, setAllVideos] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [shouldGlow, setShouldGlow] = useState(false);
@@ -28,49 +28,24 @@ export default function Navbar() {
   const auth = useAuth();
   const router = useRouter();
 
+  const { results, isSearching } = useSearch(searchQuery, allVideos);
+
+  useEffect(() => {
+    async function load() {
+      const vids = await getB2Videos();
+      setAllVideos(vids);
+    }
+    load();
+  }, []);
+
   const handleLogout = async () => {
     await auth.signOut();
     router.push('/trending');
   };
 
-  useEffect(() => {
-    const handleGlow = () => {
-      setShouldGlow(true);
-      setTimeout(() => setShouldGlow(false), 3000);
-    };
-
-    window.addEventListener('auth-required-glow', handleGlow);
-    return () => window.removeEventListener('auth-required-glow', handleGlow);
-  }, []);
-
-  const trie = useMemo(() => {
-    const vTrie = new VideoTrie();
-    MOCK_VIDEOS.forEach(v => {
-      const words = [...v.title.split(' '), ...v.tags];
-      words.forEach(word => vTrie.insert(word, v.id));
-    });
-    return vTrie;
-  }, []);
-
-  useEffect(() => {
-    if (searchQuery.length > 0) {
-      const videoIds = trie.search(searchQuery);
-      const matchedTitles = MOCK_VIDEOS
-        .filter(v => videoIds.includes(v.id))
-        .map(v => v.title)
-        .slice(0, 5);
-      setSuggestions(matchedTitles);
-      setShowSuggestions(true);
-    } else {
-      setSuggestions([]);
-      setShowSuggestions(false);
-    }
-  }, [searchQuery, trie]);
-
   return (
     <nav className="sticky top-0 z-50 glass-panel border-b-0 m-4 rounded-2xl px-6 py-3 flex items-center justify-between">
       <div className="flex items-center gap-4">
-        {/* Mobile Menu Trigger */}
         <Sheet>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon" className="lg:hidden text-muted-foreground hover:text-accent">
@@ -97,10 +72,10 @@ export default function Navbar() {
 
       <div className="flex-1 max-w-2xl px-4 sm:px-12 relative">
         <div className="relative group">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-accent transition-colors" size={18} />
+          <Search className={cn("absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors", isSearching ? "animate-pulse text-accent" : "group-focus-within:text-accent")} size={18} />
           <Input 
             className="w-full pl-10 bg-white/5 border-white/10 focus:border-accent/50 focus:ring-accent/20 rounded-xl font-body"
-            placeholder="Search the community..."
+            placeholder="Search the mesh..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setShowSuggestions(true)}
@@ -108,16 +83,38 @@ export default function Navbar() {
           />
         </div>
 
-        {showSuggestions && suggestions.length > 0 && (
-          <div className="absolute top-full left-4 right-4 sm:left-12 sm:right-12 mt-2 glass-panel border border-white/10 rounded-xl overflow-hidden animate-in fade-in slide-in-from-top-2">
-            {suggestions.map((s, idx) => (
-              <button 
-                key={idx}
-                className="w-full text-left px-4 py-3 hover:bg-accent/10 hover:text-accent transition-colors border-b border-white/5 last:border-0 font-body text-sm"
-              >
-                {s}
-              </button>
-            ))}
+        {showSuggestions && (results.length > 0 || isSearching) && (
+          <div className="absolute top-full left-4 right-4 sm:left-12 sm:right-12 mt-2 glass-panel border border-white/10 rounded-xl overflow-hidden animate-in fade-in slide-in-from-top-2 shadow-2xl z-[60]">
+            <ScrollArea className="max-h-[400px]">
+              {isSearching ? (
+                <div className="p-4 flex items-center justify-center gap-2 text-xs font-code text-accent animate-pulse">
+                  <Loader2 size={14} className="animate-spin" /> ANALYZING PREFIXES...
+                </div>
+              ) : (
+                <div className="p-2 space-y-1">
+                  {results.map((res, idx) => (
+                    <button 
+                      key={`${res.video.id}-${idx}`}
+                      onClick={() => router.push(`/video/${res.video.id}`)}
+                      className="w-full flex items-center gap-3 p-2 hover:bg-white/5 rounded-lg transition-colors text-left group"
+                    >
+                      <div className="w-20 aspect-video rounded-md bg-white/5 overflow-hidden flex-shrink-0 border border-white/10">
+                        <img src={res.video.thumbnail} className="w-full h-full object-cover group-hover:scale-110 transition-transform" alt="" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold truncate group-hover:text-accent transition-colors">{res.video.title}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] text-muted-foreground truncate">{res.video.creator}</span>
+                          {res.isFuzzy && (
+                            <span className="text-[9px] font-code bg-accent/10 text-accent px-1.5 rounded uppercase">Fuzzy Match</span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
           </div>
         )}
       </div>
@@ -177,10 +174,7 @@ export default function Navbar() {
                 <DropdownMenuLabel className="font-headline">Guest Session</DropdownMenuLabel>
                 <DropdownMenuSeparator className="bg-white/10" />
                 <DropdownMenuItem className="hover:bg-accent/10 cursor-pointer font-bold text-accent" onClick={() => router.push('/auth')}>
-                  <LogIn size={16} className="mr-2" /> Sign In
-                </DropdownMenuItem>
-                <DropdownMenuItem className="hover:bg-accent/10 cursor-pointer" onClick={() => router.push('/help')}>
-                  Help Center
+                  <Zap size={16} className="mr-2" /> Sign In
                 </DropdownMenuItem>
               </>
             )}
