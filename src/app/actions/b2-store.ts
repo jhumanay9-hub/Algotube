@@ -33,6 +33,16 @@ async function saveJsonToB2(key: string, data: any) {
   }));
 }
 
+/* --- USER PROFILES --- */
+
+export async function getB2UserProfile(userId: string) {
+  return await fetchJsonFromB2<any>(`users/${userId}/profile.json`, null);
+}
+
+export async function saveB2UserProfile(userId: string, profile: any) {
+  await saveJsonToB2(`users/${userId}/profile.json`, profile);
+}
+
 /* --- VIDEOS --- */
 
 export async function getB2Videos() {
@@ -43,7 +53,7 @@ export async function getB2Videos() {
 
 export async function registerB2Video(videoData: any) {
   const current = await fetchJsonFromB2<any[]>('content/registry.json', []);
-  current.unshift(videoData); // Add new video to the top
+  current.unshift(videoData);
   await saveJsonToB2('content/registry.json', current);
 }
 
@@ -86,11 +96,9 @@ export async function addToB2History(userId: string, videoId: string) {
   const key = `users/${userId}/history.json`;
   const history = await fetchJsonFromB2<string[]>(key, []);
   
-  // Remove if exists to move to top
   const filtered = history.filter(id => id !== videoId);
   filtered.unshift(videoId);
   
-  // Limit to 100
   await saveJsonToB2(key, filtered.slice(0, 100));
 }
 

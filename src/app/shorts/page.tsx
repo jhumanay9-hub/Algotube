@@ -1,27 +1,30 @@
 
 "use client";
 
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import ShortsPlayer from '@/components/video/ShortsPlayer';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, limit } from 'firebase/firestore';
 import { Zap, Loader2 } from 'lucide-react';
+import { getB2Videos } from '@/app/actions/b2-store';
 
 export default function ShortsPage() {
-  const { firestore } = useFirestore();
+  const [videos, setVideos] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const shortsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(
-      collection(firestore, 'videos'),
-      where('aspectRatio', '==', '9:16'),
-      limit(20)
-    );
-  }, [firestore]);
+  useEffect(() => {
+    async function loadData() {
+      setIsLoading(true);
+      const data = await getB2Videos();
+      setVideos(data);
+      setIsLoading(false);
+    }
+    loadData();
+  }, []);
 
-  const { data: shorts, isLoading } = useCollection(shortsQuery);
+  const shorts = useMemo(() => {
+    return videos.filter(v => v.aspectRatio === '9:16' || (v as any).tags?.includes('short'));
+  }, [videos]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-black/50">
@@ -34,7 +37,7 @@ export default function ShortsPage() {
           {isLoading ? (
             <div className="h-full flex flex-col items-center justify-center text-accent gap-4">
               <Loader2 className="animate-spin" size={48} />
-              <p className="font-code text-sm tracking-widest animate-pulse uppercase">Syncing Vertical Mesh...</p>
+              <p className="font-code text-sm tracking-widest animate-pulse uppercase">Syncing B2 Vertical Mesh...</p>
             </div>
           ) : shorts && shorts.length > 0 ? (
             shorts.map((short) => (
@@ -46,7 +49,7 @@ export default function ShortsPage() {
                 <Zap size={40} className="text-red-500" />
               </div>
               <h2 className="text-2xl font-headline font-bold text-white mb-2">Shorts Matrix is Empty</h2>
-              <p className="max-w-md font-body">Be the first to upload a vertical transmission (9:16) to dominate the feed.</p>
+              <p className="max-w-md font-body">Vertical transmissions are stored directly on the B2 storage mesh.</p>
             </div>
           )}
         </main>

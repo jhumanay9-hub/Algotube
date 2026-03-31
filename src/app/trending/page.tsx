@@ -1,30 +1,32 @@
 
 "use client";
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import VideoCard from '@/components/video-card/VideoCard';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, limit } from 'firebase/firestore';
-import { TrendingUp, Flame, Zap } from 'lucide-react';
+import { TrendingUp, Flame, Loader2 } from 'lucide-react';
 import { calculateHotScore } from '@/lib/ranking';
+import { getB2Videos } from '@/app/actions/b2-store';
 
 export default function TrendingPage() {
-  const { firestore } = useFirestore();
-  
-  const videosQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'videos'), limit(50));
-  }, [firestore]);
+  const [videos, setVideos] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const { data: videos, isLoading } = useCollection(videosQuery);
+  useEffect(() => {
+    async function loadData() {
+      setIsLoading(true);
+      const data = await getB2Videos();
+      setVideos(data);
+      setIsLoading(false);
+    }
+    loadData();
+  }, []);
 
   const trendingVideos = useMemo(() => {
-    if (!videos) return [];
     return [...videos].sort((a, b) => {
-      const scoreA = calculateHotScore(a.likesCount || 0, a.dislikesCount || 0, a.uploadDate || new Date().toISOString());
-      const scoreB = calculateHotScore(b.likesCount || 0, b.dislikesCount || 0, b.uploadDate || new Date().toISOString());
+      const scoreA = calculateHotScore(a.likesCount || 0, 0, a.uploadDate || a.uploadedAt || new Date().toISOString());
+      const scoreB = calculateHotScore(b.likesCount || 0, 0, b.uploadDate || b.uploadedAt || new Date().toISOString());
       return scoreB - scoreA;
     });
   }, [videos]);
@@ -37,7 +39,7 @@ export default function TrendingPage() {
         <Sidebar />
         
         <main className="flex-1 overflow-y-auto p-4 pt-0 custom-scrollbar">
-          <div className="mb-10 glass-panel rounded-3xl p-8 relative overflow-hidden flex items-center bg-gradient-to-r from-accent/10 to-transparent border-l-4 border-accent">
+          <div className="mb-10 glass-panel rounded-3xl p-8 relative overflow-hidden flex items-center bg-gradient-to-r from-accent/10 to-transparent border-l-4 border-accent mt-4">
             <div className="relative z-10">
               <div className="flex items-center gap-2 mb-2 text-accent">
                 <Flame size={20} className="fill-accent" />
@@ -45,7 +47,7 @@ export default function TrendingPage() {
               </div>
               <h1 className="text-4xl font-headline font-bold mb-2">Decay-Weighted Ranking</h1>
               <p className="text-muted-foreground font-body max-w-xl text-sm">
-                Real-time algorithmic feed where performance and freshness collide.
+                Real-time algorithmic feed powered by B2 Persistence.
               </p>
             </div>
           </div>
