@@ -1,13 +1,14 @@
 
 /**
  * Calculates the 'Hotness Score' based on the decay-weighted ranking algorithm.
- * Formula: Score = (Likes - Dislikes) / (Time Since Upload + 2)^1.5
+ * Formula: Score = (Views + (Likes * 5)) / (AgeInHours + 2)^1.5
+ * 
+ * @param views Total number of views
  * @param likes Total number of likes
- * @param dislikes Total number of dislikes
  * @param uploadedAt Date when the video was uploaded (Date object, timestamp number, ISO string, or Firestore-style {seconds})
  * @returns A numerical score representing the current trending weight
  */
-export function calculateHotScore(likes: number, dislikes: number, uploadedAt: Date | { seconds: number } | string | number): number {
+export function calculateHotScore(views: number, likes: number, uploadedAt: Date | { seconds: number } | string | number): number {
   let uploadTime: number;
 
   if (typeof uploadedAt === 'number') {
@@ -19,18 +20,19 @@ export function calculateHotScore(likes: number, dislikes: number, uploadedAt: D
   } else if (uploadedAt && typeof uploadedAt === 'object' && 'seconds' in uploadedAt) {
     uploadTime = (uploadedAt as { seconds: number }).seconds * 1000;
   } else {
-    // Fallback to now if the format is unrecognized
     uploadTime = Date.now();
   }
   
   const now = Date.now();
+  // Difference in hours
   const hoursSinceUpload = (now - uploadTime) / (1000 * 60 * 60);
   
   // Ensure hours is non-negative
   const t = Math.max(0, hoursSinceUpload);
   
-  // Calculate score: Simple decay weighted engagement
-  const score = (likes - dislikes) / Math.pow(t + 2, 1.5);
+  // Formula: (Views + Likes*5) / (Age + 2)^1.5
+  // Weighting likes 5x more than views as requested.
+  const score = (views + (likes * 5)) / Math.pow(t + 2, 1.5);
   
   return score;
 }
