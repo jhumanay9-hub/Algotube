@@ -59,9 +59,11 @@ const analyzeVideoContentFlow = ai.defineFlow(
   async (input) => {
     try {
       const {output} = await analyzePrompt(input);
-      return output!;
+      if (!output) throw new Error('AI service returned no valid output.');
+      return output;
     } catch (error: any) {
-      console.error('AI Analysis Quota Exceeded or Error:', error.message);
+      // Improved error logging without syntax issues
+      console.error('[AnalyzeFlow] Quota Limit or Service Error:', error?.message || error);
       
       // Fallback response for 429 errors or other service interruptions
       return {

@@ -96,9 +96,10 @@ const personalizedVideoRecommendationsFlow = ai.defineFlow(
   async (input) => {
     try {
       const {output} = await recommendationPrompt(input);
-      return output!;
+      if (!output) throw new Error('AI recommendation engine returned no output.');
+      return output;
     } catch (error: any) {
-      console.error('AI Recommendation Quota Exceeded or Error:', error.message);
+      console.error('[RecommendationFlow] Quota Limit or Service Error:', error?.message || error);
       
       // Fallback: Pick top 3 videos from availableVideos that aren't in viewingHistory
       const watchedIds = new Set(input.viewingHistory.map(v => v.id));
