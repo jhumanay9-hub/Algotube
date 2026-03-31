@@ -3,6 +3,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import CommunityPanel from '@/components/layout/CommunityPanel';
@@ -33,10 +34,12 @@ export default function VideoDetailPage() {
 
   const { data: video, isLoading: isVideoLoading } = useDoc(videoRef);
   
+  const creatorId = video?.uploaderId || (MOCK_VIDEOS.find(v => v.id === id) as any)?.uploaderId || "system_mock";
+
   const subRef = useMemoFirebase(() => {
-    if (!firestore || !user || !video?.uploaderId) return null;
-    return doc(firestore, 'userProfiles', user.uid, 'subscriptions', video.uploaderId);
-  }, [firestore, user, video?.uploaderId]);
+    if (!firestore || !user || !creatorId) return null;
+    return doc(firestore, 'userProfiles', user.uid, 'subscriptions', creatorId);
+  }, [firestore, user, creatorId]);
 
   const { data: subscription } = useDoc(subRef);
   const isSubscribed = !!subscription;
@@ -74,11 +77,7 @@ export default function VideoDetailPage() {
   const handleInteraction = async (type: 'like' | 'dislike') => {
     if (isUserLoading) return;
     
-    // Debug log for interaction tracking
-    console.log('Action attempted by:', user?.email || 'Anonymous');
-
     if (!user) {
-      // Dispatch custom event to trigger Navbar glow
       window.dispatchEvent(new CustomEvent('auth-required-glow'));
       toast({ 
         variant: "destructive",
@@ -101,14 +100,13 @@ export default function VideoDetailPage() {
 
         const videoDoc = await transaction.get(videoRef);
         if (!videoDoc.exists()) {
-          // Lazy Hydration: Create Firestore document for mock video if missing
           transaction.set(videoRef, {
             id: id,
             title: displayVideo.title,
             description: (displayVideo as any).description || displayVideo.title,
             videoUrl: (displayVideo as any).videoUrl || "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
             thumbnailUrl: (displayVideo as any).thumbnailUrl || displayVideo.thumbnail,
-            uploaderId: (displayVideo as any).uploaderId || "system_mock",
+            uploaderId: creatorId,
             uploadDate: serverTimestamp(),
             viewsCount: (displayVideo as any).viewsCount || displayVideo.views,
             likesCount: type === 'like' ? 1 : 0,
@@ -151,9 +149,6 @@ export default function VideoDetailPage() {
   const handleSubscribe = async () => {
     if (isUserLoading) return;
 
-    // Debug log for subscription tracking
-    console.log('Action attempted by:', user?.email || 'Anonymous');
-
     if (!user) {
       window.dispatchEvent(new CustomEvent('auth-required-glow'));
       toast({ 
@@ -164,7 +159,6 @@ export default function VideoDetailPage() {
       return;
     }
 
-    const creatorId = video?.uploaderId || (displayVideo as any).uploaderId || "system_mock";
     if (!firestore || !creatorId) return;
 
     await toggleSubscription(firestore, user.uid, creatorId, isSubscribed);
@@ -193,7 +187,6 @@ export default function VideoDetailPage() {
     <div className="flex flex-col h-screen overflow-hidden relative">
       <Navbar />
 
-      {/* Global Loading Spinner for Auth State Persistence */}
       {isUserLoading && (
         <div className="absolute inset-0 z-[100] bg-background/50 backdrop-blur-md flex flex-col items-center justify-center gap-4">
           <div className="w-16 h-16 border-4 border-accent/20 border-t-accent rounded-full animate-spin shadow-[0_0_20px_rgba(116,222,236,0.2)]" />
@@ -217,11 +210,15 @@ export default function VideoDetailPage() {
               
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-accent/10 border border-accent/30 flex items-center justify-center font-bold text-accent">
-                    {displayVideo.uploaderId ? "U" : displayVideo.creator?.[0] || "A"}
-                  </div>
+                  <Link href={`/channel/${creatorId}`}>
+                    <div className="w-12 h-12 rounded-xl bg-accent/10 border border-accent/30 flex items-center justify-center font-bold text-accent hover:bg-accent/20 transition-all cursor-pointer">
+                      {displayVideo.creator?.[0] || "A"}
+                    </div>
+                  </Link>
                   <div>
-                    <h3 className="font-bold text-sm">{displayVideo.creator || "Mesh Creator"}</h3>
+                    <Link href={`/channel/${creatorId}`} className="font-bold text-sm hover:text-accent transition-colors block">
+                      {displayVideo.creator || "Mesh Creator"}
+                    </Link>
                     <p className="text-xs text-muted-foreground">AlgoTube Citizen</p>
                   </div>
                   <Button 
