@@ -2,18 +2,19 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, Loader2, FileVideo, Sparkles, DatabaseZap } from 'lucide-react';
+import { Upload, Loader2, FileVideo, ShieldAlert, DatabaseZap, AlertCircle } from 'lucide-react';
 import { useUser } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { analyzeVideoContent } from '@/ai/flows/analyze-video-content-flow';
 import { getPresignedUploadUrl } from '@/app/actions/s3-actions';
 import { registerB2Video } from '@/app/actions/b2-store';
 import { cn } from '@/lib/utils';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface UploadModalProps {
   isOpen: boolean;
@@ -27,6 +28,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('Social Media');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   
   const { user } = useUser();
   const { toast } = useToast();
@@ -38,6 +40,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
 
     setIsProcessing(true);
     setUploadProgress(0);
+    setUploadError(null);
     
     try {
       const fileName = `${Date.now()}-${selectedFile.name.replace(/\s+/g, '_')}`;
@@ -70,11 +73,17 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve();
           } else {
-            reject(new Error(`B2 Node rejected stream with status ${xhr.status}`));
+            const errorMsg = `B2 Node rejected stream (Status ${xhr.status}). Check Bucket Permissions.`;
+            reject(new Error(errorMsg));
           }
         };
 
-        xhr.onerror = () => reject(new Error("Network interruption during B2 broadcast."));
+        xhr.onerror = () => {
+          // This specific error usually indicates a CORS failure or network block
+          const corsHint = "Network interruption. Ensure your B2 Bucket CORS allows 'PUT' from this origin.";
+          reject(new Error(corsHint));
+        };
+
         xhr.send(selectedFile);
       });
 
@@ -107,24 +116,33 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
       setIsProcessing(false);
     } catch (error: any) {
       console.error('B2 Upload Mesh Failure:', error);
-      toast({ 
-        variant: "destructive", 
-        title: "Broadcast Failed", 
-        description: error?.message || "An unexpected error occurred during the transmission." 
-      });
+      setUploadError(error.message || "An unexpected error occurred during the transmission.");
       setIsProcessing(false);
     }
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="glass-panel border-white/10 bg-black/80 backdrop-blur-2xl text-foreground max-w-xl p-0">
+      <DialogContent className="glass-panel border-white/10 bg-black/80 backdrop-blur-2xl text-foreground max-w-xl p-0 overflow-hidden">
         <div className="p-8">
           <DialogHeader className="mb-6">
             <DialogTitle className="text-2xl font-headline font-bold flex items-center gap-2">
               <Upload className="text-accent" /> B2 Mesh Transmission
             </DialogTitle>
           </DialogHeader>
+
+          {uploadError && (
+            <Alert variant="destructive" className="mb-6 bg-destructive/10 border-destructive/20 text-destructive-foreground">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Broadcast Failed</AlertTitle>
+              <AlertDescription className="text-xs font-body">
+                {uploadError}
+                <div className="mt-2 p-2 bg-black/20 rounded font-code text-[10px] text-white/70">
+                  Tip: In B2 Console, set Bucket CORS to allow 'PUT' for your preview URL.
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
 
           {isProcessing ? (
             <div className="flex flex-col items-center justify-center py-12 gap-6 text-center">
@@ -141,12 +159,25 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
             </div>
           ) : (
             <form onSubmit={handleUpload} className="space-y-6">
-              <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-white/10 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-accent/40 transition-all">
-                <input type="file" ref={fileInputRef} onChange={e => setSelectedFile(e.target.files?.[0] || null)} className="hidden" accept=".mp4,.mov" />
+              <div 
+                onClick={() => fileInputRef.current?.click()} 
+                className={cn(
+                  "border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all",
+                  selectedFile ? "border-accent/40 bg-accent/5" : "border-white/10 hover:border-accent/40"
+                )}
+              >
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  onChange={e => setSelectedFile(e.target.files?.[0] || null)} 
+                  className="hidden" 
+                  accept=".mp4,.mov,.webm" 
+                />
                 {selectedFile ? (
-                  <div className="flex items-center gap-2 text-accent">
-                    <FileVideo size={20} />
-                    <span className="font-code text-xs font-bold">{selectedFile.name}</span>
+                  <div className="flex flex-col items-center gap-2">
+                    <FileVideo size={32} className="text-accent" />
+                    <span className="font-code text-xs font-bold text-accent">{selectedFile.name}</span>
+                    <span className="text-[10px] opacity-50">{(selectedFile.size / (1024 * 1024)).toFixed(2)} MB</span>
                   </div>
                 ) : (
                   <>
@@ -162,7 +193,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
                   placeholder="Transmission Title" 
                   value={title} 
                   onChange={e => setTitle(e.target.value)} 
-                  className="bg-white/5 border-white/10" 
+                  className="bg-white/5 border-white/10 focus:border-accent/50" 
                   required
                 />
               </div>
@@ -173,15 +204,15 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
                   placeholder="Contextual metadata for the community..." 
                   value={description} 
                   onChange={e => setDescription(e.target.value)} 
-                  className="bg-white/5 border-white/10" 
+                  className="bg-white/5 border-white/10 min-h-[100px] focus:border-accent/50" 
                 />
               </div>
 
               <div className="pt-4 flex justify-end gap-3">
-                <Button type="button" variant="ghost" onClick={onClose}>Abort</Button>
+                <Button type="button" variant="ghost" onClick={onClose} className="rounded-xl">Abort</Button>
                 <Button 
                   type="submit" 
-                  className="bg-accent text-background hover:neon-glow font-bold px-8" 
+                  className="bg-accent text-background hover:neon-glow font-bold px-8 rounded-xl" 
                   disabled={!selectedFile || isProcessing || !title}
                 >
                   START BROADCAST

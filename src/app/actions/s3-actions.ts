@@ -7,6 +7,7 @@ import { s3Client, BUCKET_NAME } from '@/lib/s3-client';
 
 /**
  * Generates a presigned URL for a client to upload a file directly to B2.
+ * Note: The client must include the exact Content-Type header used here.
  */
 export async function getPresignedUploadUrl(fileName: string, contentType: string) {
   try {
@@ -16,16 +17,18 @@ export async function getPresignedUploadUrl(fileName: string, contentType: strin
       ContentType: contentType,
     });
 
+    // 1-hour expiry for the upload window
     const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
     return { url, key: fileName, bucket: BUCKET_NAME };
   } catch (error: any) {
-    console.error('Error generating upload URL:', error);
-    throw new Error('Could not generate upload authorization.');
+    console.error('B2 Presign Error (Upload):', error);
+    throw new Error('Could not generate upload authorization from B2 Mesh.');
   }
 }
 
 /**
  * Generates a presigned URL for a client to stream/view a file from B2.
+ * Valid for 60 minutes as per requirements.
  */
 export async function getPresignedDownloadUrl(key: string) {
   if (!key) return null;
@@ -39,7 +42,7 @@ export async function getPresignedDownloadUrl(key: string) {
     const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
     return url;
   } catch (error: any) {
-    console.error('Error generating download URL:', error);
+    console.error('B2 Presign Error (Download):', error);
     return null;
   }
 }

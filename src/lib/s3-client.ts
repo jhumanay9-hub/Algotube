@@ -10,8 +10,13 @@ if (!accessKeyId || !secretAccessKey || !endpoint) {
   console.warn('S3 Client: Missing Backblaze configuration in .env. S3 features will be unavailable.');
 }
 
+/**
+ * Configure S3 Client for Backblaze B2.
+ * ForcePathStyle is essential for B2 compatibility.
+ * We ensure the endpoint is correctly formatted as a full URL.
+ */
 export const s3Client = new S3Client({
-  endpoint: endpoint?.startsWith('http') ? endpoint : `https://${endpoint}`,
+  endpoint: endpoint ? (endpoint.startsWith('http') ? endpoint : `https://${endpoint}`) : undefined,
   region,
   credentials: {
     accessKeyId: accessKeyId || '',
