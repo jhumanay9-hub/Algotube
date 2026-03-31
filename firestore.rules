@@ -18,18 +18,21 @@ service cloud.firestore {
 
     // --- COMMUNITY VIDEOS ---
     match /videos/{videoId} {
-      // Allow anyone to see videos and the video list
-      allow read: if true;
+      // Explicitly allow both individual read and collection listing for everyone
+      allow get, list: if true;
       
-      // Allow signed-in users to upload and like/dislike
+      // Allow signed-in users to upload
       allow create: if isSignedIn();
+      
+      // Allow signed-in users to update (likes, dislikes, views)
+      // For MVP, we allow authenticated updates to the video document.
       allow update: if isSignedIn();
       
       // Only uploader can delete their transmission
       allow delete: if isSignedIn() && (resource.data.uploaderId == request.auth.uid);
 
       match /comments/{commentId} {
-        allow read: if true;
+        allow get, list: if true;
         allow create: if isSignedIn();
         allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid);
       }
@@ -38,7 +41,7 @@ service cloud.firestore {
     // --- USER PROFILES & PRIVATE DATA ---
     match /userProfiles/{userId} {
       // Profiles are public for discovery
-      allow read: if true;
+      allow get, list: if true;
       
       // Users can only create their own profile
       allow create: if isOwner(userId);
