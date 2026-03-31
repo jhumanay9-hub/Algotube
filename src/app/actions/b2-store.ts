@@ -6,7 +6,7 @@ import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { MOCK_VIDEOS } from '@/app/lib/mock-data';
 
 /**
- * Generic B2 JSON fetcher
+ * Generic B2 JSON fetcher with error diagnostics
  */
 async function fetchJsonFromB2<T>(key: string, defaultValue: T): Promise<T> {
   try {
@@ -16,21 +16,29 @@ async function fetchJsonFromB2<T>(key: string, defaultValue: T): Promise<T> {
     }));
     const data = await response.Body?.transformToString();
     return data ? JSON.parse(data) : defaultValue;
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name !== 'NoSuchKey') {
+      console.error(`B2 Mesh Error [FETCH]: ${key}`, error.message);
+    }
     return defaultValue;
   }
 }
 
 /**
- * Generic B2 JSON saver
+ * Generic B2 JSON saver with error diagnostics
  */
 async function saveJsonToB2(key: string, data: any) {
-  await s3Client.send(new PutObjectCommand({
-    Bucket: BUCKET_NAME,
-    Key: key,
-    Body: JSON.stringify(data),
-    ContentType: 'application/json',
-  }));
+  try {
+    await s3Client.send(new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+      Body: JSON.stringify(data),
+      ContentType: 'application/json',
+    }));
+  } catch (error: any) {
+    console.error(`B2 Mesh Error [SAVE]: ${key}`, error.message);
+    throw new Error(`B2 Node failed to persist data: ${error.message}`);
+  }
 }
 
 /* --- USER PROFILES --- */
@@ -47,7 +55,7 @@ export async function saveB2UserProfile(userId: string, profile: any) {
 
 export async function getB2Videos() {
   const dynamicVideos = await fetchJsonFromB2<any[]>('content/registry.json', []);
-  // Merge with mock videos for a full feed
+  // Combine with mock data for a robust discovery feed
   return [...dynamicVideos, ...MOCK_VIDEOS];
 }
 
@@ -69,7 +77,7 @@ export async function postB2Comment(videoId: string, comment: any) {
   await saveJsonToB2(`social/comments/${videoId}.json`, current);
 }
 
-/* --- USER DATA (LIKES / HISTORY) --- */
+/* --- SOCIAL INTERACTIONS --- */
 
 export async function toggleB2Like(userId: string, videoId: string) {
   const key = `users/${userId}/likes.json`;
@@ -99,6 +107,7 @@ export async function addToB2History(userId: string, videoId: string) {
   const filtered = history.filter(id => id !== videoId);
   filtered.unshift(videoId);
   
+  // Keep last 100 transmissions in history
   await saveJsonToB2(key, filtered.slice(0, 100));
 }
 
