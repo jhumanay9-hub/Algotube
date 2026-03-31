@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useUser, useAuth } from '@/firebase';
 import { cn } from '@/lib/utils';
+import { SheetClose } from '@/components/ui/sheet';
 
 const MENU_ITEMS = [
   { icon: Home, label: 'Home', href: '/' },
@@ -41,7 +42,7 @@ export default function Sidebar({ isMobile }: SidebarProps) {
     const isActive = pathname === href;
     const itemContent = (
       <div className={cn(
-        "flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 group cursor-pointer",
+        "flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 group cursor-pointer w-full",
         isActive 
           ? 'bg-primary/20 text-accent ring-1 ring-accent/30 shadow-[0_0_15px_rgba(116,222,236,0.1)]' 
           : 'text-muted-foreground hover:bg-white/5 hover:text-foreground',
@@ -52,22 +53,31 @@ export default function Sidebar({ isMobile }: SidebarProps) {
       </div>
     );
 
-    if (onClick) {
-      return <button onClick={onClick} className="w-full text-left focus:outline-none">{itemContent}</button>;
-    }
-
-    return (
-      <Link href={href} className="w-full">
+    const buttonElement = onClick ? (
+      <button onClick={onClick} className="w-full text-left focus:outline-none">{itemContent}</button>
+    ) : (
+      <Link href={href} className="w-full block">
         {itemContent}
       </Link>
     );
+
+    // If on mobile, wrap the element in SheetClose to close the hamburger menu on click
+    if (isMobile) {
+      return (
+        <SheetClose asChild>
+          {buttonElement}
+        </SheetClose>
+      );
+    }
+
+    return buttonElement;
   };
 
   return (
     <aside className={cn(
       "glass-panel m-4 mt-0 rounded-2xl p-4 flex flex-col gap-8",
       !isMobile && "w-64 hidden lg:flex h-[calc(100vh-120px)]",
-      isMobile && "w-full h-full m-0 rounded-none bg-black/90 backdrop-blur-3xl"
+      isMobile && "w-full h-full m-0 rounded-none bg-black/90 backdrop-blur-3xl border-0"
     )}>
       <div>
         <h3 className="text-xs font-headline font-semibold text-muted-foreground uppercase tracking-widest mb-4 px-4">Navigation</h3>
