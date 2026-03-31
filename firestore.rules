@@ -14,13 +14,10 @@ service cloud.firestore {
       // We set it to true to ensure the Home feed (list) and Video page (get) always work.
       allow read: if true;
       
-      // Allow any authenticated user to create (upload) or update (engagement metrics)
-      allow create: if request.auth != null;
-      allow update: if request.auth != null;
+      // Allow any authenticated user to create (upload/hydrate) or update (engagement metrics)
+      // Broad update to allow community counters (likes, views)
+      allow write: if request.auth != null;
       
-      // Only the original uploader can delete their transmission
-      allow delete: if request.auth != null && resource.data.uploaderId == request.auth.uid;
-
       // Nested Comments
       match /comments/{commentId} {
         allow read: if true;

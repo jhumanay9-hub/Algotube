@@ -93,15 +93,51 @@ export default function VideoDetailPage() {
 
     try {
       await runTransaction(firestore, async (transaction) => {
+        // 1. Check if user already interacted
         const interactionDoc = await transaction.get(interactionRef);
         if (interactionDoc.exists()) return Promise.reject("ALREADY_INTERACTED");
 
-        transaction.update(videoRef, { [type === 'like' ? 'likesCount' : 'dislikesCount']: increment(1) });
-        transaction.set(interactionRef, { userId: user.uid, videoId: id, interactionType: type, timestamp: serverTimestamp() });
+        // 2. Get video doc for existence check (Lazy Hydration)
+        const videoSnapshot = await transaction.get(videoRef);
+        
+        if (!videoSnapshot.exists()) {
+          // Hydrate the mock video into Firestore on-the-fly
+          const mockVideo = MOCK_VIDEOS.find(v => v.id === id);
+          transaction.set(videoRef, {
+            id: id,
+            title: mockVideo?.title || "Unknown Transmission",
+            description: "Hydrated from mock registry.",
+            uploaderId: "system_mock",
+            uploadDate: serverTimestamp(),
+            viewsCount: (mockVideo?.views || 0) + 1,
+            likesCount: type === 'like' ? 1 : 0,
+            dislikesCount: type === 'dislike' ? 1 : 0,
+            commentsCount: 0,
+            processingStatus: 'ready',
+            category: mockVideo?.category || 'Social Life',
+            tags: mockVideo?.tags || [],
+            creator: mockVideo?.creator || 'System'
+          });
+        } else {
+          // Perform normal increment on existing record
+          transaction.update(videoRef, { 
+            [type === 'like' ? 'likesCount' : 'dislikesCount']: increment(1) 
+          });
+        }
+
+        // 3. Persist interaction record
+        transaction.set(interactionRef, { 
+          userId: user.uid, 
+          videoId: id, 
+          interactionType: type, 
+          timestamp: serverTimestamp() 
+        });
       });
       toast({ title: "Success!", description: `Transmission ${type}d.` });
     } catch (e: any) {
-      if (e !== "ALREADY_INTERACTED") {
+      if (e === "ALREADY_INTERACTED") {
+        toast({ title: "Already Interacted", description: "You have already recorded your stance." });
+      } else {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
           path: videoRef.path,
           operation: 'update',
