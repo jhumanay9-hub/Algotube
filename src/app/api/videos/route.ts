@@ -1,9 +1,12 @@
+
 import { NextResponse } from 'next/server';
 import { turso } from '@/lib/turso';
 
+const STABLE_VIDEO_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+
 /**
  * Handles Global Video Discovery from Turso SQL Mesh
- * Updated: Automatically sanitizes and provides fallbacks for broken metadata.
+ * Hardened: Aggressively sanitizes URLs to prevent "Format Error" (Code 4).
  */
 export async function GET(request: Request) {
   try {
@@ -15,11 +18,19 @@ export async function GET(request: Request) {
       args: [limit]
     });
     
-    // Sanitize URLs on the fly to prevent player crashes
+    // Strict Sanitization: If URL is missing, is an image, or is a known placeholder, swap for stable MP4.
     const sanitizedRows = result.rows.map(row => {
-      let videoUrl = row.url as string;
-      if (!videoUrl || videoUrl.includes('placeholder.com') || videoUrl.includes('undefined')) {
-        videoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+      let videoUrl = (row.url as string || "").trim();
+      const isInvalid = 
+        !videoUrl || 
+        videoUrl.includes('placeholder.com') || 
+        videoUrl.includes('picsum.photos') || 
+        videoUrl.includes('undefined') || 
+        videoUrl === '' ||
+        (!videoUrl.toLowerCase().endsWith('.mp4') && !videoUrl.toLowerCase().endsWith('.mov') && !videoUrl.includes('googlevideo') && !videoUrl.includes('googleapis'));
+
+      if (isInvalid) {
+        videoUrl = STABLE_VIDEO_URL;
       }
       return { ...row, url: videoUrl };
     });
@@ -33,15 +44,22 @@ export async function GET(request: Request) {
 
 /**
  * Registers a new transmission in the Turso Registry
- * Updated: Initialized counters to 0 and added automatic placeholder swap with stable Google-hosted URL.
+ * Hardened: Initialized counters and enforced stable URL for all non-mp4 inputs.
  */
 export async function POST(request: Request) {
   try {
     let { title, description, url, author_name } = await request.json();
     
-    // Automatic swap for placeholder URLs to ensure playback stability
-    if (!url || url.includes('placeholder.com') || url.includes('mov_bbb.mp4')) {
-      url = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+    // Automatic swap for non-video URLs to ensure playback stability
+    const videoUrl = (url || "").trim();
+    const isInvalid = 
+      !videoUrl || 
+      videoUrl.includes('placeholder.com') || 
+      videoUrl.includes('picsum.photos') || 
+      (!videoUrl.toLowerCase().endsWith('.mp4') && !videoUrl.toLowerCase().endsWith('.mov') && !videoUrl.includes('googlevideo'));
+
+    if (isInvalid) {
+      url = STABLE_VIDEO_URL;
     }
     
     await turso.execute({

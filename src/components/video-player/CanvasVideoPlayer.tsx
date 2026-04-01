@@ -12,13 +12,12 @@ interface CanvasVideoPlayerProps {
 
 /**
  * CanvasVideoPlayer - Standard HTML5 Implementation
- * Hardened with "Wait for Mesh" guards and the "Key Hack" to prevent race conditions.
+ * Hardened with MIME-type hinting and aggressive source validation to resolve Code 4 errors.
  */
 const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ videoUrl, externalState }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // 1. THE 'WAIT FOR MESH' GUARD:
-  // Prevent the video element from mounting if the URL is missing or malformed.
+  // Guard: Prevent mount if URL is missing or malformed.
   if (!videoUrl || videoUrl === 'undefined' || videoUrl.length < 10) {
     return (
       <div className="aspect-video bg-black/40 animate-pulse rounded-3xl border border-white/5 flex items-center justify-center">
@@ -30,17 +29,13 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ videoUrl, e
     );
   }
 
-  // 2. LOGGING:
-  // Confirming the render with a valid URL string.
-  console.log('Rendering Player with URL:', videoUrl);
-  
   // Sync with external state (Watch Party / SQL Mesh Sync)
   useEffect(() => {
     if (!videoRef.current || !externalState) return;
     
     const targetTime = externalState.currentTime;
     
-    // Sync time if drift is significant (> 1.5 seconds)
+    // Sync time if drift is significant
     if (isFinite(targetTime) && Math.abs(videoRef.current.currentTime - targetTime) > 1.5) {
       videoRef.current.currentTime = targetTime;
     }
@@ -49,9 +44,7 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ videoUrl, e
     if (externalState.isPaused && !videoRef.current.paused) {
       videoRef.current.pause();
     } else if (!externalState.isPaused && videoRef.current.paused) {
-      videoRef.current.play().catch(() => {
-        // Autoplay may be blocked by browser policy
-      });
+      videoRef.current.play().catch(() => {});
     }
   }, [externalState, videoUrl]);
 
@@ -64,25 +57,23 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ videoUrl, e
   return (
     <div className="relative aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/5 group">
       <video
-        // 3. THE 'KEY HACK': 
-        // Forces React to destroy and recreate the video element when the URL changes.
         key={videoUrl} 
         ref={videoRef}
-        src={videoUrl}
         className="w-full h-full"
         controls
         autoPlay
         playsInline
-        preload="metadata" // 4. METADATA GUARD: Prevents aggressive buffering of invalid sources
+        preload="auto"
         crossOrigin="anonymous"
         onError={(e) => {
           const error = e.currentTarget.error;
-          // Only log if we actually have a source we expected to work
           if (videoUrl && videoUrl !== 'undefined') {
-            console.error('Mesh Sync Failed:', error?.message || 'Unknown Media Error', `(Code: ${error?.code})`);
+            console.error('Mesh Sync Failed:', error?.message || 'Format Error', `(Code: ${error?.code})`);
           }
         }}
       >
+        {/* Source Hinting: Assist pre-loader in identifying valid MP4 transmissions */}
+        <source src={videoUrl} type="video/mp4" />
         Your browser does not support the video tag.
       </video>
     </div>
