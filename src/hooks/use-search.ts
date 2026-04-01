@@ -12,6 +12,7 @@ export interface SearchResult {
 /**
  * useSearch Hook
  * Implements debounced prefix matching and fuzzy Levenshtein ranking.
+ * Now handles dynamic indexing for data lacking searchKeywords.
  */
 export function useSearch(query: string, allVideos: any[], debounceMs = 300) {
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -29,7 +30,7 @@ export function useSearch(query: string, allVideos: any[], debounceMs = 300) {
       const searchTerm = query.toLowerCase().trim();
       
       // 1. Prefix Matching
-      // We check searchKeywords or generate them on the fly for legacy/mock data
+      // We check searchKeywords or generate them on the fly for mock/legacy data
       const exactMatches = allVideos.filter(v => {
         const keywords = v.searchKeywords || generatePrefixes(v.title || "");
         return keywords.some((k: string) => k.startsWith(searchTerm) || searchTerm.startsWith(k));
@@ -37,12 +38,12 @@ export function useSearch(query: string, allVideos: any[], debounceMs = 300) {
 
       let finalResults: SearchResult[] = exactMatches.map(v => ({
         video: v,
-        score: (v.views || v.viewsCount || 0) + 1000, // Boost exact matches
+        score: (v.views || v.viewsCount || 0) + 1000, // Significant boost for exact matches
         isFuzzy: false
       }));
 
-      // 2. Fuzzy Matching (if exact matches are sparse)
-      if (finalResults.length < 10) {
+      // 2. Fuzzy Matching (suggesting results for minor typos)
+      if (finalResults.length < 5) {
         const fuzzyResults = allVideos
           .filter(v => !exactMatches.find(em => em.id === v.id))
           .map(v => {
@@ -59,10 +60,10 @@ export function useSearch(query: string, allVideos: any[], debounceMs = 300) {
         finalResults = [...finalResults, ...fuzzyResults];
       }
 
-      // 3. Rank by score
+      // 3. Rank by score (Engagement + Relevance)
       finalResults.sort((a, b) => b.score - a.score);
       
-      setResults(finalResults.slice(0, 24)); // Limit for performance
+      setResults(finalResults.slice(0, 24));
       setIsSearching(false);
     }, debounceMs);
 

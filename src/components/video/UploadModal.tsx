@@ -50,7 +50,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
     try {
       const fileName = `${Date.now()}-${selectedFile.name.replace(/\s+/g, '_')}`;
       
-      // Phase 1: AI Content Audit & B2 Permission Handshake
+      // Phase 1: Content Audit & Presign Handshake
       const [aiResult, uploadAuth] = await Promise.all([
         analyzeVideoContent({ title, description }),
         getPresignedUploadUrl(fileName, selectedFile.type)
@@ -62,7 +62,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
         return;
       }
 
-      // Phase 2: Direct Broadcast to B2 Persistence Node
+      // Phase 2: Direct Broadcast to B2 Node
       const uploadPromise = new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('PUT', uploadAuth.url);
@@ -78,12 +78,13 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve();
           } else {
-            reject(new Error(`B2 Node rejected stream (Status: ${xhr.status})`));
+            reject(new Error(`B2 Node Status: ${xhr.status}. Transmission rejected.`));
           }
         };
 
         xhr.onerror = () => {
-          reject(new Error("Network interruption (likely CORS). Ensure your B2 Bucket CORS allows 'PUT' from this origin."));
+          const corsHint = "Network interruption (likely CORS). Ensure your B2 Bucket CORS allows 'PUT' from this origin.";
+          reject(new Error(corsHint));
         };
 
         xhr.send(selectedFile);
@@ -91,7 +92,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
 
       await uploadPromise;
 
-      // Phase 3: Metadata Persistence in B2 Registry
+      // Phase 3: Metadata Registry Update
       const isShort = category === 'Shorts' || forcedCategory === 'Shorts';
       const searchKeywords = generatePrefixes(title);
       const tags = [...aiResult.seoTags];
@@ -112,7 +113,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
         category,
         creator: user.displayName || "Explorer",
         tags,
-        searchKeywords, // Optimization for high-performance search
+        searchKeywords,
         s3Key: fileName,
         s3Bucket: uploadAuth.bucket,
         aspectRatio: isShort ? '9:16' : '16:9'
@@ -120,7 +121,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
 
       await registerB2Video(videoData);
 
-      toast({ title: "Broadcast Successful", description: `Transmission persisted with optimized search indexing.` });
+      toast({ title: "Broadcast Successful", description: "Metadata persisted to the B2 registry." });
       onClose();
       setIsProcessing(false);
       
@@ -128,8 +129,8 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
       setDescription('');
       setSelectedFile(null);
     } catch (error: any) {
-      console.error('B2 Upload Mesh Failure:', error);
-      setUploadError(error?.message || "Transmission interrupted by network security.");
+      console.error('B2 Mesh Failure:', error);
+      setUploadError(error?.message || "Transmission interrupted by security proxy.");
       setIsProcessing(false);
     }
   };
@@ -165,12 +166,11 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
                     <p className="font-bold flex items-center gap-2 text-white">
                       <ShieldAlert size={14} className="text-red-400" /> Action Required: CORS Config
                     </p>
-                    <p className="opacity-80">Your browser blocked the direct upload. Apply this setting in your B2 Console:</p>
+                    <p className="opacity-80">Direct browser-to-B2 uploads require specific bucket settings. Copy this to your B2 Console:</p>
                     <div className="bg-white/5 p-3 rounded-lg font-code text-[10px] space-y-1">
                       <p><span className="text-accent">Allowed Origins:</span> *</p>
                       <p><span className="text-accent">Allowed Methods:</span> PUT, GET, POST</p>
                       <p><span className="text-accent">Allowed Headers:</span> Content-Type, x-amz-*, authorization</p>
-                      <p><span className="text-accent">Expose Headers:</span> ETag</p>
                     </div>
                   </div>
                 )}
@@ -191,19 +191,14 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
                 )}>
                   Broadcasting: {Math.round(uploadProgress)}%
                 </p>
-                <div className={cn(
-                  "flex items-center gap-2 px-3 py-1 rounded-full border",
-                  forcedCategory === 'Shorts' ? "bg-red-500/5 border-red-500/10" : "bg-accent/5 border-accent/10"
-                )}>
-                  <DatabaseZap size={14} className={forcedCategory === 'Shorts' ? "text-red-500" : "text-accent"} />
-                  <span className={cn("text-[10px] font-code", forcedCategory === 'Shorts' ? "text-red-500" : "text-accent")}>
-                    B2 MESH SYNC IN PROGRESS
-                  </span>
+                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-accent/5 border border-accent/10">
+                  <DatabaseZap size={14} className="text-accent" />
+                  <span className="text-[10px] font-code text-accent uppercase">Resolving Mesh Persistence</span>
                 </div>
               </div>
             </div>
           ) : (
-            <form onSubmit={handleUpload} className="space-y-6 pb-2">
+            <form onSubmit={handleUpload} className="space-y-6">
               <div 
                 onClick={() => fileInputRef.current?.click()} 
                 className={cn(
@@ -233,7 +228,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
                     <Upload size={48} className="text-white/20" />
                     <div className="text-center">
                       <p className="text-sm font-bold opacity-50">Select Media Stream</p>
-                      <p className="text-[10px] opacity-30 mt-1 uppercase tracking-wider">Direct Broadcast to B2</p>
+                      <p className="text-[10px] opacity-30 mt-1 uppercase tracking-wider">Direct B2 Broadcast</p>
                     </div>
                   </>
                 )}
