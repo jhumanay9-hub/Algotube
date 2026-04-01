@@ -1,5 +1,4 @@
-
-'use client';
+"use client";
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -22,6 +21,10 @@ interface UploadModalProps {
   forcedCategory?: string;
 }
 
+/**
+ * UploadModal - B2 Media + Turso Metadata Integration
+ * Broadcasts video files to Backblaze and metadata to Turso SQL mesh.
+ */
 export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -69,7 +72,10 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
           if (e.lengthComputable) setUploadProgress((e.loaded / e.total) * 100);
         };
         xhr.onload = () => (xhr.status >= 200 && xhr.status < 300) ? resolve() : reject(new Error(`B2 rejection`));
-        xhr.onerror = () => reject(new Error("CORS or Network error"));
+        xhr.onerror = () => {
+          const corsHint = "Network interruption (likely CORS). Ensure your B2 Bucket CORS allows 'PUT' from this origin.";
+          reject(new Error(corsHint));
+        };
         xhr.send(selectedFile);
       });
 
@@ -97,7 +103,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
         aspectRatio: isShort ? '9:16' : '16:9'
       };
 
-      // PERSIST TO TURSO MESH
+      // PERSIST TO TURSO SQL MESH
       const tursoRes = await fetch('/api/videos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -133,7 +139,19 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
             <Alert variant="destructive" className="mb-6">
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>Broadcast Failure</AlertTitle>
-              <AlertDescription>{uploadError}</AlertDescription>
+              <AlertDescription>
+                {uploadError}
+                {uploadError.includes('CORS') && (
+                  <div className="mt-4 p-4 bg-black/40 rounded-lg text-[10px] font-code leading-relaxed">
+                    <p className="mb-2 font-bold text-accent underline uppercase">B2 CORS GUIDE:</p>
+                    1. Go to B2 Cloud Storage Console<br/>
+                    2. Select Bucket Settings -&gt; CORS<br/>
+                    3. Add Allowed Origin: {typeof window !== 'undefined' ? window.location.origin : ''}<br/>
+                    4. Allowed Methods: GET, PUT, POST<br/>
+                    5. Allowed Headers: content-type, authorization
+                  </div>
+                )}
+              </AlertDescription>
             </Alert>
           )}
 
@@ -146,7 +164,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
             </div>
           ) : (
             <form onSubmit={handleUpload} className="space-y-6">
-              <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-white/10 rounded-2xl p-12 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-accent/40">
+              <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-white/10 rounded-2xl p-12 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-accent/40 bg-white/5 transition-all">
                 <input type="file" ref={fileInputRef} onChange={e => setSelectedFile(e.target.files?.[0] || null)} className="hidden" accept=".mp4,.mov,.webm" />
                 {selectedFile ? (
                   <div className="text-center">
@@ -161,19 +179,37 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
                 )}
               </div>
               
-              <div className="space-y-2">
-                <Label>Title</Label>
-                <Input value={title} onChange={e => setTitle(e.target.value)} className="bg-white/5 border-white/10 h-12 rounded-xl" required />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Transmission Title</Label>
+                  <Input value={title} onChange={e => setTitle(e.target.value)} className="bg-white/5 border-white/10 h-10 rounded-xl" required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Mesh Category</Label>
+                  <select 
+                    value={category} 
+                    onChange={e => setCategory(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 h-10 rounded-xl px-3 text-sm focus:outline-none focus:ring-1 focus:ring-accent/40"
+                    disabled={!!forcedCategory}
+                  >
+                    <option value="Entertainment">Entertainment</option>
+                    <option value="Social Life">Social Life</option>
+                    <option value="Computer Science">Computer Science</option>
+                    <option value="Physics">Physics</option>
+                    <option value="Cybersecurity">Cybersecurity</option>
+                    <option value="Shorts">Shorts</option>
+                  </select>
+                </div>
               </div>
 
               <div className="space-y-2">
-                <Label>Description</Label>
-                <Textarea value={description} onChange={e => setDescription(e.target.value)} className="bg-white/5 border-white/10 min-h-[100px] rounded-xl" />
+                <Label>Transmission Metadata (Description)</Label>
+                <Textarea value={description} onChange={e => setDescription(e.target.value)} className="bg-white/5 border-white/10 min-h-[80px] rounded-xl" />
               </div>
 
               <div className="pt-4 flex justify-end gap-3">
-                <Button type="button" variant="ghost" onClick={onClose}>Abort</Button>
-                <Button type="submit" className="bg-accent text-background font-bold px-10 h-12 rounded-xl" disabled={!selectedFile || isProcessing || !title}>
+                <Button type="button" variant="ghost" onClick={onClose} className="rounded-xl">Abort</Button>
+                <Button type="submit" className="bg-accent text-background font-bold px-10 h-12 rounded-xl hover:neon-glow" disabled={!selectedFile || isProcessing || !title}>
                   START BROADCAST
                 </Button>
               </div>

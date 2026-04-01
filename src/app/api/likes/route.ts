@@ -1,15 +1,13 @@
-
 import { NextResponse } from 'next/server';
 import { turso } from '@/lib/turso';
 
 /**
- * Toggles a Like in the Turso Mesh
+ * Toggles a Like in the Turso Mesh with atomic counter updates
  */
 export async function POST(request: Request) {
   try {
     const { userId, videoId } = await request.json();
     
-    // Check if already liked
     const existing = await turso.execute({
       sql: "SELECT * FROM likes WHERE userId = ? AND videoId = ?",
       args: [userId, videoId]
@@ -18,23 +16,19 @@ export async function POST(request: Request) {
     let isLikedNow = false;
 
     if (existing.rows.length > 0) {
-      // Unlike
       await turso.execute({
         sql: "DELETE FROM likes WHERE userId = ? AND videoId = ?",
         args: [userId, videoId]
       });
-      // Decrement counter
       await turso.execute({
         sql: "UPDATE videos SET likesCount = MAX(0, likesCount - 1) WHERE id = ?",
         args: [videoId]
       });
     } else {
-      // Like
       await turso.execute({
         sql: "INSERT INTO likes (userId, videoId) VALUES (?, ?)",
         args: [userId, videoId]
       });
-      // Increment counter
       await turso.execute({
         sql: "UPDATE videos SET likesCount = likesCount + 1 WHERE id = ?",
         args: [videoId]

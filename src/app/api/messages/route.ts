@@ -1,9 +1,8 @@
-
 import { NextResponse } from 'next/server';
 import { turso } from '@/lib/turso';
 
 /**
- * Handles video comments (messages) via Turso
+ * Handles community messaging via Turso SQL mesh
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);

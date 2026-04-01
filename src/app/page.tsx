@@ -1,16 +1,18 @@
-
 "use client";
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import VideoCard from '@/components/video-card/VideoCard';
 import { TrendingUp, Sparkles, Heart, DatabaseZap, Loader2 } from 'lucide-react';
-import { useUser } from '@/firebase';
 import { cn } from '@/lib/utils';
 
 const CATEGORIES = ["All", "Entertainment", "Social Life", "Computer Science", "Physics", "Cybersecurity"];
 
+/**
+ * AlgoTube Home - SQL Discovery Interface
+ * Fetches transmission metadata from the Turso SQL mesh.
+ */
 export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [videos, setVideos] = useState<any[]>([]);
@@ -74,7 +76,7 @@ export default function Home() {
                   Next Gen <br/>SQL Mesh discovery
                 </h1>
                 <p className="text-muted-foreground font-body leading-relaxed mb-8 text-lg">
-                  Powered by Turso. Ultra-low latency transmission metadata served from the global SQL edge.
+                  Powered by Turso. Ultra-low latency transmission metadata served from the global SQL edge nodes.
                 </p>
               </div>
             </div>

@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 import { turso } from '@/lib/turso';
 
@@ -24,11 +23,10 @@ export async function GET(request: Request) {
 
     const result = await turso.execute({ sql: query, args });
     
-    // Parse tags if they were stored as strings
     const videos = result.rows.map(row => ({
       ...row,
       tags: typeof row.tags === 'string' ? row.tags.split(',') : row.tags,
-      creator: row.uploaderId // In a real app, join with users table
+      creator: row.uploaderId 
     }));
 
     return NextResponse.json(videos);

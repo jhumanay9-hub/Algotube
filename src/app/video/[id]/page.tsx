@@ -1,9 +1,7 @@
-
 "use client";
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import CommunityPanel from '@/components/layout/CommunityPanel';
@@ -16,6 +14,10 @@ import { useToast } from '@/hooks/use-toast';
 import { useS3Url } from '@/hooks/use-s3-url';
 import { cn } from '@/lib/utils';
 
+/**
+ * VideoDetailPage - Turso SQL Integrated
+ * Implements Optimistic UI for social engagement.
+ */
 export default function VideoDetailPage() {
   const { id } = useParams();
   const { user } = useUser();
@@ -29,7 +31,6 @@ export default function VideoDetailPage() {
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [isSubscribed, setIsSubscribed] = useState(false);
-  const [isSocialLoading, setIsSocialLoading] = useState(true);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -59,7 +60,6 @@ export default function VideoDetailPage() {
       console.error('SQL Sync failed');
     } finally {
       setIsLoading(false);
-      setIsSocialLoading(false);
     }
   }, [id, user]);
 
@@ -82,6 +82,7 @@ export default function VideoDetailPage() {
     try {
       const res = await fetch('/api/likes', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.uid, videoId: id })
       });
       const data = await res.json();
@@ -104,6 +105,7 @@ export default function VideoDetailPage() {
     try {
       const res = await fetch('/api/subscriptions', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.uid, creatorId: video.uploaderId })
       });
       const data = await res.json();

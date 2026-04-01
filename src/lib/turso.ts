@@ -1,9 +1,9 @@
-
 import { createClient } from '@libsql/client';
 
 /**
  * Turso Database Client Singleton
  * Manages SQL mesh connection using prepared statements for security.
+ * Pulls configuration from environment variables.
  */
 export const turso = createClient({
   url: process.env.TURSO_DATABASE_URL || '',
@@ -21,7 +21,7 @@ export type VideoRow = {
   viewsCount: number;
   likesCount: number;
   category: string;
-  tags: string; // Stored as JSON string or comma-separated
+  tags: string; 
   aspectRatio: string;
   s3Key: string;
   s3Bucket: string;

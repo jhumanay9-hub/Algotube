@@ -1,8 +1,7 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Send, MessageSquare, Loader2, Lock } from 'lucide-react';
+import { Send, MessageSquare, Loader2, Lock, DatabaseZap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
@@ -13,6 +12,10 @@ interface CommunityPanelProps {
   videoId: string;
 }
 
+/**
+ * CommunityPanel - Turso SQL Messaging
+ * Handles community chat via prepared SQL statements.
+ */
 export default function CommunityPanel({ videoId }: CommunityPanelProps) {
   const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState('');
@@ -27,6 +30,8 @@ export default function CommunityPanel({ videoId }: CommunityPanelProps) {
       const res = await fetch(`/api/messages?videoId=${videoId}`);
       const data = await res.json();
       setComments(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('SQL Message Fetch Failure');
     } finally {
       setIsLoading(false);
     }
@@ -40,13 +45,20 @@ export default function CommunityPanel({ videoId }: CommunityPanelProps) {
     if (!user || !newComment.trim()) return;
     
     setIsSubmitting(true);
+    
+    // Optimistic state
     const commentData = {
       videoId,
       userId: user.uid,
       userName: user.displayName || "Explorer",
       userAvatar: user.photoURL || `https://picsum.photos/seed/${user.uid}/40/40`,
       content: newComment.trim(),
+      createdAt: new Date().toISOString()
     };
+
+    setComments(prev => [commentData, ...prev]);
+    const cachedInput = newComment;
+    setNewComment('');
 
     try {
       const res = await fetch('/api/messages', {
@@ -55,12 +67,13 @@ export default function CommunityPanel({ videoId }: CommunityPanelProps) {
         body: JSON.stringify(commentData)
       });
       
-      if (res.ok) {
-        setComments(prev => [{ ...commentData, createdAt: new Date().toISOString() }, ...prev]);
-        setNewComment('');
-        toast({ title: "Message Broadcasted", description: "Persisted to SQL mesh." });
-      }
+      if (!res.ok) throw new Error('SQL Write Failure');
+      
+      toast({ title: "Message Broadcasted", description: "Persisted to SQL mesh." });
     } catch (e) {
+      // Rollback optimistic state
+      setComments(prev => prev.filter(c => c !== commentData));
+      setNewComment(cachedInput);
       toast({ variant: "destructive", title: "Mesh Error", description: "SQL write rejected." });
     } finally {
       setIsSubmitting(false);
@@ -68,11 +81,14 @@ export default function CommunityPanel({ videoId }: CommunityPanelProps) {
   };
 
   return (
-    <div className="glass-panel rounded-2xl flex flex-col h-[500px] lg:h-full overflow-hidden shadow-2xl">
+    <div className="glass-panel rounded-2xl flex flex-col h-[500px] lg:h-full overflow-hidden shadow-2xl border-white/5">
       <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
         <div className="flex items-center gap-2">
           <MessageSquare size={18} className="text-accent" />
           <h3 className="font-headline font-bold text-xs tracking-tight uppercase">SQL Community Hub</h3>
+        </div>
+        <div className="text-[8px] font-code text-accent/50 flex items-center gap-1">
+          <DatabaseZap size={10} /> TURSO ACTIVE
         </div>
       </div>
 
@@ -80,11 +96,11 @@ export default function CommunityPanel({ videoId }: CommunityPanelProps) {
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-full gap-2 opacity-50">
             <Loader2 className="animate-spin text-accent" />
-            <span className="text-[10px] font-code">QUERYING SQL NODES...</span>
+            <span className="text-[10px] font-code uppercase">QUERYING SQL NODES...</span>
           </div>
         ) : comments.length > 0 ? (
           comments.map((c, idx) => (
-            <div key={idx} className="flex gap-3 animate-in fade-in duration-300">
+            <div key={idx} className="flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
               <Avatar className="h-8 w-8 rounded-lg border border-white/10">
                 <AvatarImage src={c.userAvatar} />
                 <AvatarFallback>{c.userName?.[0]}</AvatarFallback>
