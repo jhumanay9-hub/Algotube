@@ -1,7 +1,6 @@
-
 "use client";
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -9,9 +8,10 @@ import { Slider } from '@/components/ui/slider';
 interface CanvasVideoPlayerProps {
   src: string | null;
   poster?: string;
+  externalState?: { currentTime: number; isPaused: boolean };
 }
 
-export default function CanvasVideoPlayer({ src, poster }: CanvasVideoPlayerProps) {
+const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, externalState }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -20,6 +20,27 @@ export default function CanvasVideoPlayer({ src, poster }: CanvasVideoPlayerProp
   const [isMuted, setIsMuted] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [quality, setQuality] = useState('1080p');
+
+  // Sync with external state (Watch Party)
+  useEffect(() => {
+    if (!videoRef.current || !externalState) return;
+    
+    // Threshold for seeking to avoid jitter
+    if (Math.abs(videoRef.current.currentTime - externalState.currentTime) > 1) {
+      videoRef.current.currentTime = externalState.currentTime;
+    }
+
+    if (externalState.isPaused && !videoRef.current.paused) {
+      videoRef.current.pause();
+    } else if (!externalState.isPaused && videoRef.current.paused) {
+      videoRef.current.play().catch(() => {});
+    }
+  }, [externalState]);
+
+  useImperativeHandle(ref, () => ({
+    getCurrentTime: () => videoRef.current?.currentTime || 0,
+    getIsPaused: () => videoRef.current?.paused || false
+  }));
 
   useEffect(() => {
     const video = videoRef.current;
@@ -35,12 +56,10 @@ export default function CanvasVideoPlayer({ src, poster }: CanvasVideoPlayerProp
       if (!video.paused && !video.ended) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
-        // Custom Overlay logic
         ctx.fillStyle = 'rgba(116, 222, 236, 0.1)';
         ctx.font = '12px "Space Grotesk"';
-        ctx.fillText(`Stream: ${quality} | Encrypted`, 20, 30);
+        ctx.fillText(`Stream: ${quality} | SQL-Sync Active`, 20, 30);
         
-        // Scanline effect
         ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
         for (let i = 0; i < canvas.height; i += 4) {
           ctx.fillRect(0, i, canvas.width, 1);
@@ -107,7 +126,6 @@ export default function CanvasVideoPlayer({ src, poster }: CanvasVideoPlayerProp
         onClick={togglePlay}
       />
 
-      {/* Glassmorphic Controls Overlay */}
       <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
         <div className="absolute bottom-0 left-0 right-0 p-6 flex flex-col gap-4">
           <Slider 
@@ -160,4 +178,7 @@ export default function CanvasVideoPlayer({ src, poster }: CanvasVideoPlayerProp
       )}
     </div>
   );
-}
+});
+
+CanvasVideoPlayer.displayName = 'CanvasVideoPlayer';
+export default CanvasVideoPlayer;

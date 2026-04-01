@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
@@ -8,27 +8,26 @@ import ConversationPanel from '@/components/layout/ConversationPanel';
 import CanvasVideoPlayer from '@/components/video-player/CanvasVideoPlayer';
 import VideoCard from '@/components/video-card/VideoCard';
 import { useUser } from '@/firebase';
-import { MessageCircle, ThumbsUp, Eye, Sparkles, ShieldCheck, Loader2, Share2 } from 'lucide-react';
+import { MessageCircle, ThumbsUp, Eye, Sparkles, Loader2, Share2, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { useS3Url } from '@/hooks/use-s3-url';
 import { cn } from '@/lib/utils';
 
-/**
- * VideoDetailPage - Conversation Integrated
- * Features Turso SQL Chat Rooms & Polling.
- */
 export default function VideoDetailPage() {
   const { id } = useParams();
   const { user } = useUser();
   const { toast } = useToast();
+  const playerRef = useRef<any>(null);
 
   const [video, setVideo] = useState<any>(null);
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showConversation, setShowConversation] = useState(true);
+  const [externalSyncState, setExternalSyncState] = useState<any>(null);
+  const [localPlayerState, setLocalPlayerState] = useState({ currentTime: 0, isPaused: true });
   
-  // Optimistic UI States
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -67,6 +66,19 @@ export default function VideoDetailPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Player State Polling for Leader Broadcast
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (playerRef.current) {
+        setLocalPlayerState({
+          currentTime: playerRef.current.getCurrentTime(),
+          isPaused: playerRef.current.getIsPaused()
+        });
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleLike = async () => {
     if (!user) {
@@ -118,7 +130,11 @@ export default function VideoDetailPage() {
                   <p className="text-[10px] font-code text-accent uppercase">Syncing B2 Stream...</p>
                 </div>
               ) : (
-                <CanvasVideoPlayer src={streamUrl} />
+                <CanvasVideoPlayer 
+                  ref={playerRef}
+                  src={streamUrl} 
+                  externalState={externalSyncState} 
+                />
               )}
             </div>
             
@@ -129,7 +145,7 @@ export default function VideoDetailPage() {
               
               <div className="relative z-10">
                 <div className="flex items-center gap-3 mb-4">
-                  <span className="bg-accent/20 text-accent text-[9px] font-code px-2 py-0.5 rounded-full border border-accent/30 uppercase">SQL Meta Verified</span>
+                  <span className="bg-accent/20 text-accent text-[9px] font-code px-2 py-0.5 rounded-full border border-accent/30 uppercase">SQL Sync Mesh</span>
                   <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-code">Transmission ID: {id?.slice(0, 8)}</span>
                 </div>
 
@@ -165,8 +181,8 @@ export default function VideoDetailPage() {
                       onClick={() => setShowConversation(!showConversation)}
                       className={cn("rounded-2xl gap-3 h-12 px-6 border", showConversation ? "border-accent text-accent bg-accent/5" : "bg-white/5 border-white/10")}
                     >
-                      <MessageCircle size={18} /> 
-                      <span className="font-bold">JOIN CONVERSATION</span>
+                      <Users size={18} /> 
+                      <span className="font-bold">WATCH PARTY</span>
                     </Button>
                   </div>
                 </div>
@@ -199,7 +215,11 @@ export default function VideoDetailPage() {
           
           {showConversation && (
             <div className="w-full xl:w-96 shrink-0 animate-in slide-in-from-right-4 duration-500">
-              <ConversationPanel videoId={id as string} />
+              <ConversationPanel 
+                videoId={id as string} 
+                onSyncState={setExternalSyncState}
+                playerState={localPlayerState}
+              />
             </div>
           )}
         </main>
