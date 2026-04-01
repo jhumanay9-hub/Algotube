@@ -3,8 +3,7 @@ import { NextResponse } from 'next/server';
 import { turso } from '@/lib/turso';
 
 /**
- * Toggles a Like in the Turso Mesh with atomic counter updates
- * Ensures videoId is handled as a strict INTEGER
+ * Toggles a Favorite in the Turso Mesh
  */
 export async function POST(request: Request) {
   try {
@@ -16,36 +15,28 @@ export async function POST(request: Request) {
     }
 
     const existing = await turso.execute({
-      sql: "SELECT * FROM likes WHERE userId = ? AND videoId = ?",
+      sql: "SELECT * FROM favorites WHERE userId = ? AND videoId = ?",
       args: [userId, vidInt]
     });
 
-    let isLikedNow = false;
+    let isFavoritedNow = false;
 
     if (existing.rows.length > 0) {
       await turso.execute({
-        sql: "DELETE FROM likes WHERE userId = ? AND videoId = ?",
+        sql: "DELETE FROM favorites WHERE userId = ? AND videoId = ?",
         args: [userId, vidInt]
-      });
-      await turso.execute({
-        sql: "UPDATE videos SET likesCount = MAX(0, likesCount - 1) WHERE id = ?",
-        args: [vidInt]
       });
     } else {
       await turso.execute({
-        sql: "INSERT INTO likes (userId, videoId) VALUES (?, ?)",
+        sql: "INSERT INTO favorites (userId, videoId) VALUES (?, ?)",
         args: [userId, vidInt]
       });
-      await turso.execute({
-        sql: "UPDATE videos SET likesCount = likesCount + 1 WHERE id = ?",
-        args: [vidInt]
-      });
-      isLikedNow = true;
+      isFavoritedNow = true;
     }
 
-    return NextResponse.json({ isLikedNow });
+    return NextResponse.json({ isFavoritedNow });
   } catch (error: any) {
-    console.error('Turso Like Error:', error);
+    console.error('Turso Favorite Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -58,7 +49,7 @@ export async function GET(request: Request) {
 
   try {
     const result = await turso.execute({
-      sql: "SELECT videoId FROM likes WHERE userId = ?",
+      sql: "SELECT videoId FROM favorites WHERE userId = ?",
       args: [userId]
     });
     return NextResponse.json(result.rows.map(r => Number(r.videoId)));

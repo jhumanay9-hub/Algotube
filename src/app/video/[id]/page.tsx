@@ -9,7 +9,7 @@ import ConversationPanel from '@/components/layout/ConversationPanel';
 import CanvasVideoPlayer from '@/components/video-player/CanvasVideoPlayer';
 import VideoCard from '@/components/video-card/VideoCard';
 import { useUser } from '@/firebase';
-import { ThumbsUp, Eye, Sparkles, Loader2, Users } from 'lucide-react';
+import { ThumbsUp, ThumbsDown, Star, Eye, Sparkles, Loader2, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
@@ -27,14 +27,19 @@ export default function VideoDetailPage() {
   const [showConversation, setShowConversation] = useState(true);
   const [externalSyncState, setExternalSyncState] = useState<any>(null);
   const [localPlayerState, setLocalPlayerState] = useState({ currentTime: 0, isPaused: true });
+  
   const [isLiked, setIsLiked] = useState(false);
+  const [isDisliked, setIsDisliked] = useState(false);
+  const [isFavorited, setIsFavorited] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [vRes, lRes] = await Promise.all([
+      const [vRes, lRes, dRes, fRes] = await Promise.all([
         fetch(`/api/videos?limit=10`),
-        user ? fetch(`/api/likes?userId=${user.uid}`).then(r => r.json()) : Promise.resolve([])
+        user ? fetch(`/api/likes?userId=${user.uid}`).then(r => r.json()) : Promise.resolve([]),
+        user ? fetch(`/api/dislikes?userId=${user.uid}`).then(r => r.json()) : Promise.resolve([]),
+        user ? fetch(`/api/favorites?userId=${user.uid}`).then(r => r.json()) : Promise.resolve([])
       ]);
       
       const vData = await vRes.json();
@@ -44,8 +49,10 @@ export default function VideoDetailPage() {
       setVideo(found || vids[0] || null);
       setRecommendations(vids.filter((v: any) => v.id?.toString() !== id?.toString()).slice(0, 3));
       
-      if (user && Array.isArray(lRes)) {
-        setIsLiked(lRes.includes(id as string));
+      if (user) {
+        setIsLiked(Array.isArray(lRes) && lRes.includes(Number(id)));
+        setIsDisliked(Array.isArray(dRes) && dRes.includes(Number(id)));
+        setIsFavorited(Array.isArray(fRes) && fRes.includes(Number(id)));
       }
     } catch (e: any) {
       console.error('Mesh Sync Failed:', e.message || e);
@@ -70,22 +77,37 @@ export default function VideoDetailPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const handleLike = async () => {
+  const handleInteraction = async (type: 'likes' | 'dislikes' | 'favorites') => {
     if (!user) {
       toast({ title: "Auth Required", description: "Sign in to interact with mesh." });
       return;
     }
-    const previousState = isLiked;
-    setIsLiked(!isLiked);
+
+    let previousState: boolean;
+    let setter: (val: boolean) => void;
+
+    if (type === 'likes') {
+      previousState = isLiked;
+      setter = setIsLiked;
+    } else if (type === 'dislikes') {
+      previousState = isDisliked;
+      setter = setIsDisliked;
+    } else {
+      previousState = isFavorited;
+      setter = setIsFavorited;
+    }
+
+    setter(!previousState);
+
     try {
-      const res = await fetch('/api/likes', {
+      const res = await fetch(`/api/${type}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.uid, videoId: id })
       });
-      if (!res.ok) throw new Error('Like failed');
+      if (!res.ok) throw new Error('Interaction failed');
     } catch (e) {
-      setIsLiked(previousState);
+      setter(previousState);
       toast({ variant: "destructive", title: "Action Failed", description: "SQL registry rejected interaction." });
     }
   };
@@ -144,17 +166,36 @@ export default function VideoDetailPage() {
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-3">
-                    <Button variant="ghost" onClick={handleLike} className={cn("rounded-2xl gap-3 h-12 px-6", isLiked ? "text-accent bg-accent/10 border border-accent/30" : "bg-white/5 border border-white/10")}>
-                      <ThumbsUp size={18} className={isLiked ? "fill-accent" : ""} /> 
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="ghost" 
+                      onClick={() => handleInteraction('likes')} 
+                      className={cn("rounded-2xl gap-2 h-10 px-4", isLiked ? "text-accent bg-accent/10 border border-accent/30" : "bg-white/5 border border-white/10")}
+                    >
+                      <ThumbsUp size={16} className={isLiked ? "fill-accent" : ""} /> 
+                      <span className="text-[10px] font-bold">{video?.likesCount || 0}</span>
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      onClick={() => handleInteraction('dislikes')} 
+                      className={cn("rounded-2xl h-10 px-4", isDisliked ? "text-red-500 bg-red-500/10 border border-red-500/30" : "bg-white/5 border border-white/10")}
+                    >
+                      <ThumbsDown size={16} className={isDisliked ? "fill-red-500" : ""} /> 
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      onClick={() => handleInteraction('favorites')} 
+                      className={cn("rounded-2xl h-10 px-4", isFavorited ? "text-yellow-500 bg-yellow-500/10 border border-yellow-500/30" : "bg-white/5 border border-white/10")}
+                    >
+                      <Star size={16} className={isFavorited ? "fill-yellow-500" : ""} /> 
                     </Button>
                     <Button 
                       variant="ghost" 
                       onClick={() => setShowConversation(!showConversation)}
-                      className={cn("rounded-2xl gap-3 h-12 px-6 border transition-all duration-300", showConversation ? "border-accent text-accent bg-accent/5" : "bg-white/5 border border-white/10")}
+                      className={cn("rounded-2xl gap-2 h-10 px-4 border transition-all duration-300", showConversation ? "border-accent text-accent bg-accent/5" : "bg-white/5 border border-white/10")}
                     >
-                      <Users size={18} /> 
-                      <span className="font-bold text-xs uppercase tracking-widest">Join Conversation</span>
+                      <Users size={16} /> 
+                      <span className="font-bold text-[10px] uppercase tracking-widest">Chat</span>
                     </Button>
                   </div>
                 </div>

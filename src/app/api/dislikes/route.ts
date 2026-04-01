@@ -3,8 +3,7 @@ import { NextResponse } from 'next/server';
 import { turso } from '@/lib/turso';
 
 /**
- * Toggles a Like in the Turso Mesh with atomic counter updates
- * Ensures videoId is handled as a strict INTEGER
+ * Toggles a Dislike in the Turso Mesh with atomic counter updates
  */
 export async function POST(request: Request) {
   try {
@@ -16,36 +15,36 @@ export async function POST(request: Request) {
     }
 
     const existing = await turso.execute({
-      sql: "SELECT * FROM likes WHERE userId = ? AND videoId = ?",
+      sql: "SELECT * FROM dislikes WHERE userId = ? AND videoId = ?",
       args: [userId, vidInt]
     });
 
-    let isLikedNow = false;
+    let isDislikedNow = false;
 
     if (existing.rows.length > 0) {
       await turso.execute({
-        sql: "DELETE FROM likes WHERE userId = ? AND videoId = ?",
+        sql: "DELETE FROM dislikes WHERE userId = ? AND videoId = ?",
         args: [userId, vidInt]
       });
       await turso.execute({
-        sql: "UPDATE videos SET likesCount = MAX(0, likesCount - 1) WHERE id = ?",
+        sql: "UPDATE videos SET dislikesCount = MAX(0, dislikesCount - 1) WHERE id = ?",
         args: [vidInt]
       });
     } else {
       await turso.execute({
-        sql: "INSERT INTO likes (userId, videoId) VALUES (?, ?)",
+        sql: "INSERT INTO dislikes (userId, videoId) VALUES (?, ?)",
         args: [userId, vidInt]
       });
       await turso.execute({
-        sql: "UPDATE videos SET likesCount = likesCount + 1 WHERE id = ?",
+        sql: "UPDATE videos SET dislikesCount = dislikesCount + 1 WHERE id = ?",
         args: [vidInt]
       });
-      isLikedNow = true;
+      isDislikedNow = true;
     }
 
-    return NextResponse.json({ isLikedNow });
+    return NextResponse.json({ isDislikedNow });
   } catch (error: any) {
-    console.error('Turso Like Error:', error);
+    console.error('Turso Dislike Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -58,7 +57,7 @@ export async function GET(request: Request) {
 
   try {
     const result = await turso.execute({
-      sql: "SELECT videoId FROM likes WHERE userId = ?",
+      sql: "SELECT videoId FROM dislikes WHERE userId = ?",
       args: [userId]
     });
     return NextResponse.json(result.rows.map(r => Number(r.videoId)));

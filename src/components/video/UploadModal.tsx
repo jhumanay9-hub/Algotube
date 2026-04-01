@@ -22,7 +22,7 @@ interface UploadModalProps {
 /**
  * UploadModal - Refactored for EXACT Turso SQL Schema
  * Uses title, description, url, author_name.
- * Releases memory immediately to support 4GB RAM devices.
+ * Placeholder URL is a CORS-compliant test stream.
  */
 export function UploadModal({ isOpen, onClose }: UploadModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -51,7 +51,6 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
     setUploadProgress(0);
     setUploadError(null);
     
-    // Capture metadata and release large file object from memory immediately
     const authorName = user.displayName || user.email || 'Anonymous';
     const capturedTitle = title;
     const capturedDescription = description;
@@ -68,7 +67,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
       }
 
       // Exact key mapping for Turso: title, description, url, author_name
-      // Using a public sample video to bypass CORS issues during testing
+      // CORS compliant test stream
       const videoData = {
         title: capturedTitle,
         description: capturedDescription,
