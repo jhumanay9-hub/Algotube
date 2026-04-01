@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
@@ -128,7 +129,7 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
         crossOrigin="anonymous"
         playsInline
         preload="metadata"
-        onVideoError={() => console.error('Video Sync Error in SQL Mesh')}
+        onError={() => console.error('Video Sync Error in SQL Mesh')}
       />
       <canvas
         ref={canvasRef}
