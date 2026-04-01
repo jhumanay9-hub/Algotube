@@ -3,7 +3,12 @@ import { NextResponse } from 'next/server';
 import { turso } from '@/lib/turso';
 
 /**
- * Toggles a Dislike in the Turso Mesh with atomic counter updates
+ * Toggles a Dislike in the Turso Mesh
+ * Logic:
+ * 1. Parse video_id as integer.
+ * 2. If disliked -> DELETE from dislikes, decrement dislikesCount.
+ * 3. If not disliked -> DELETE from likes (mutual exclusion), decrement likesCount if removed,
+ *    INSERT into dislikes, increment dislikesCount.
  */
 export async function POST(request: Request) {
   try {
@@ -14,35 +19,50 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid videoId' }, { status: 400 });
     }
 
-    const existing = await turso.execute({
-      sql: "SELECT * FROM dislikes WHERE userId = ? AND videoId = ?",
+    const existingDislike = await turso.execute({
+      sql: "SELECT 1 FROM dislikes WHERE user_id = ? AND video_id = ?",
       args: [userId, vidInt]
     });
 
-    let isDislikedNow = false;
-
-    if (existing.rows.length > 0) {
+    if (existingDislike.rows.length > 0) {
+      // Toggle OFF
       await turso.execute({
-        sql: "DELETE FROM dislikes WHERE userId = ? AND videoId = ?",
+        sql: "DELETE FROM dislikes WHERE user_id = ? AND video_id = ?",
         args: [userId, vidInt]
       });
       await turso.execute({
         sql: "UPDATE videos SET dislikesCount = MAX(0, dislikesCount - 1) WHERE id = ?",
         args: [vidInt]
       });
+      return NextResponse.json({ active: false });
     } else {
+      // Toggle ON: Add dislike, remove like for mutual exclusion
+      const existingLike = await turso.execute({
+        sql: "SELECT 1 FROM likes WHERE user_id = ? AND video_id = ?",
+        args: [userId, vidInt]
+      });
+
+      if (existingLike.rows.length > 0) {
+        await turso.execute({
+          sql: "DELETE FROM likes WHERE user_id = ? AND video_id = ?",
+          args: [userId, vidInt]
+        });
+        await turso.execute({
+          sql: "UPDATE videos SET likesCount = MAX(0, likesCount - 1) WHERE id = ?",
+          args: [vidInt]
+        });
+      }
+
       await turso.execute({
-        sql: "INSERT INTO dislikes (userId, videoId) VALUES (?, ?)",
+        sql: "INSERT INTO dislikes (user_id, video_id) VALUES (?, ?)",
         args: [userId, vidInt]
       });
       await turso.execute({
         sql: "UPDATE videos SET dislikesCount = dislikesCount + 1 WHERE id = ?",
         args: [vidInt]
       });
-      isDislikedNow = true;
+      return NextResponse.json({ active: true });
     }
-
-    return NextResponse.json({ isDislikedNow });
   } catch (error: any) {
     console.error('Turso Dislike Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -52,16 +72,25 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get('userId');
+  const videoId = searchParams.get('videoId');
 
-  if (!userId) return NextResponse.json([]);
+  if (!userId) return NextResponse.json({ active: false });
 
   try {
-    const result = await turso.execute({
-      sql: "SELECT videoId FROM dislikes WHERE userId = ?",
-      args: [userId]
-    });
-    return NextResponse.json(result.rows.map(r => Number(r.videoId)));
+    if (videoId) {
+      const result = await turso.execute({
+        sql: "SELECT 1 FROM dislikes WHERE user_id = ? AND video_id = ?",
+        args: [userId, parseInt(videoId, 10)]
+      });
+      return NextResponse.json({ active: result.rows.length > 0 });
+    } else {
+      const result = await turso.execute({
+        sql: "SELECT video_id FROM dislikes WHERE user_id = ?",
+        args: [userId]
+      });
+      return NextResponse.json(result.rows.map(r => Number(r.video_id)));
+    }
   } catch (error: any) {
-    return NextResponse.json([]);
+    return NextResponse.json({ active: false });
   }
 }

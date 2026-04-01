@@ -35,24 +35,25 @@ export default function VideoDetailPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
+      const vidStr = id?.toString();
       const [vRes, lRes, dRes, fRes] = await Promise.all([
         fetch(`/api/videos?limit=10`),
-        user ? fetch(`/api/likes?userId=${user.uid}`).then(r => r.json()) : Promise.resolve([]),
-        user ? fetch(`/api/dislikes?userId=${user.uid}`).then(r => r.json()) : Promise.resolve([]),
-        user ? fetch(`/api/favorites?userId=${user.uid}`).then(r => r.json()) : Promise.resolve([])
+        user ? fetch(`/api/likes?userId=${user.uid}&videoId=${vidStr}`).then(r => r.json()) : Promise.resolve({ active: false }),
+        user ? fetch(`/api/dislikes?userId=${user.uid}&videoId=${vidStr}`).then(r => r.json()) : Promise.resolve({ active: false }),
+        user ? fetch(`/api/favorites?userId=${user.uid}&videoId=${vidStr}`).then(r => r.json()) : Promise.resolve({ active: false })
       ]);
       
       const vData = await vRes.json();
       const vids = Array.isArray(vData) ? vData : [];
-      const found = vids.find((v: any) => v.id?.toString() === id?.toString());
+      const found = vids.find((v: any) => v.id?.toString() === vidStr);
       
       setVideo(found || vids[0] || null);
-      setRecommendations(vids.filter((v: any) => v.id?.toString() !== id?.toString()).slice(0, 3));
+      setRecommendations(vids.filter((v: any) => v.id?.toString() !== vidStr).slice(0, 3));
       
       if (user) {
-        setIsLiked(Array.isArray(lRes) && lRes.includes(Number(id)));
-        setIsDisliked(Array.isArray(dRes) && dRes.includes(Number(id)));
-        setIsFavorited(Array.isArray(fRes) && fRes.includes(Number(id)));
+        setIsLiked(lRes.active === true);
+        setIsDisliked(dRes.active === true);
+        setIsFavorited(fRes.active === true);
       }
     } catch (e: any) {
       console.error('Mesh Sync Failed:', e.message || e);
@@ -89,9 +90,12 @@ export default function VideoDetailPage() {
     if (type === 'likes') {
       previousState = isLiked;
       setter = setIsLiked;
+      // Optimistically handle mutual exclusion for likes/dislikes
+      if (!previousState) setIsDisliked(false);
     } else if (type === 'dislikes') {
       previousState = isDisliked;
       setter = setIsDisliked;
+      if (!previousState) setIsLiked(false);
     } else {
       previousState = isFavorited;
       setter = setIsFavorited;
@@ -106,6 +110,8 @@ export default function VideoDetailPage() {
         body: JSON.stringify({ userId: user.uid, videoId: id })
       });
       if (!res.ok) throw new Error('Interaction failed');
+      const data = await res.json();
+      setter(data.active);
     } catch (e) {
       setter(previousState);
       toast({ variant: "destructive", title: "Action Failed", description: "SQL registry rejected interaction." });

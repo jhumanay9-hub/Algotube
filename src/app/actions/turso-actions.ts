@@ -1,3 +1,4 @@
+
 'use server';
 
 import { turso } from '@/lib/turso';
@@ -65,17 +66,18 @@ export async function getTursoVideos(category = 'All') {
 
 /**
  * Social Interaction Aggregates
+ * Updated for strict user_id/video_id column names.
  */
 export async function getTursoUserSocialData(userId: string) {
   try {
     const [likes, subs, history] = await Promise.all([
-      turso.execute({ sql: "SELECT videoId FROM likes WHERE userId = ?", args: [userId] }),
+      turso.execute({ sql: "SELECT video_id FROM likes WHERE user_id = ?", args: [userId] }),
       turso.execute({ sql: "SELECT creatorId FROM subscriptions WHERE userId = ?", args: [userId] }),
       turso.execute({ sql: "SELECT videoId FROM history WHERE userId = ? ORDER BY watchedAt DESC LIMIT 50", args: [userId] })
     ]);
 
     return {
-      likedVideoIds: likes.rows.map(r => r.videoId),
+      likedVideoIds: likes.rows.map(r => r.video_id),
       subscribedCreatorIds: subs.rows.map(r => r.creatorId),
       historyVideoIds: history.rows.map(r => r.videoId)
     };
