@@ -19,7 +19,7 @@ const STABLE_FALLBACK_URL = "https://commondatastorage.googleapis.com/gtv-videos
 
 /**
  * VideoDetailPage - SQL Engagement Mesh
- * Refactored to handle loading states strictly and prevent player race conditions.
+ * Hardened with strict URL sanitization and mounting guards to prevent 'undefined' race conditions.
  */
 export default function VideoDetailPage() {
   const { id } = useParams();
@@ -56,17 +56,17 @@ export default function VideoDetailPage() {
       const vids = Array.isArray(vData) ? vData : [];
       let found = vids.find((v: any) => v.id?.toString() === vidStr);
       
-      // CRITICAL: Diagnostic log for SQL mesh verification
-      console.log('SQL Mesh Data:', found);
-
       if (found) {
+        // Strict URL Sanitization
         let videoUrl = (found.url || "").trim();
-        // Resolve placeholders or broken strings to stable Google stream
         if (!videoUrl || videoUrl.includes('placeholder.com') || videoUrl === 'undefined' || videoUrl === '') {
           videoUrl = STABLE_FALLBACK_URL;
         }
         found.url = videoUrl;
       }
+
+      // Final log to verify the sanitized SQL mesh transmission
+      console.log('SQL Mesh Data:', found);
 
       setVideo(found || null);
       setRecommendations(vids.filter((v: any) => v.id?.toString() !== vidStr).slice(0, 3));
@@ -79,7 +79,6 @@ export default function VideoDetailPage() {
     } catch (e: any) {
       console.error('Mesh Sync Failed:', e.message || e);
     } finally {
-      // Ensure state is updated before ending loading
       setIsLoading(false);
     }
   }, [id, user]);
@@ -153,7 +152,6 @@ export default function VideoDetailPage() {
     );
   }
 
-  // Guard Clause: If Mesh delivers no data, stop player rendering
   if (!video || !video.url) {
     return (
       <div className="flex flex-col h-screen overflow-hidden">
@@ -178,8 +176,7 @@ export default function VideoDetailPage() {
         <main className="flex-1 overflow-y-auto p-4 pt-0 custom-scrollbar flex flex-col xl:flex-row gap-6">
           <div className="flex-1 flex flex-col gap-6">
             <div className="relative aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl group border border-white/5">
-              {/* GUARD 3: The "Wait for Mesh" logic in the Detail Page.
-                  The player ONLY mounts when isLoading is false and a URL is ready. */}
+              {/* THE WAIT-FOR-MESH GUARD: Only mount player when data is ready */}
               {!isLoading && video?.url ? (
                 <CanvasVideoPlayer 
                   ref={playerRef}

@@ -13,6 +13,7 @@ interface CanvasVideoPlayerProps {
 /**
  * CanvasVideoPlayer - Standard HTML5 Implementation
  * Hardened with "Safety Guards" to prevent race conditions and handle SQL Mesh synchronization.
+ * Refactored to use direct 'src' attribute for reliable error reporting.
  */
 const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ videoUrl, externalState }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -44,7 +45,7 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ videoUrl, e
     getIsPaused: () => videoRef.current?.paused || false
   }));
 
-  // GUARD 1: The "Wait for Mesh" Guard
+  // GUARD: The "Wait for Mesh" Guard
   // Returns a skeleton until a valid URL is delivered from Turso.
   if (!videoUrl || videoUrl === 'undefined' || videoUrl === '') {
     return (
@@ -57,16 +58,13 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ videoUrl, e
     );
   }
 
-  // Diagnostic Log: Confirm the Mesh has delivered a valid string
-  console.log('Rendering Player with URL:', videoUrl);
-
   return (
     <div className="relative aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/5 group">
       <video
-        // GUARD 2: The "Key Hack"
-        // Forces React to recreate the video tag when the URL changes from empty to real.
+        // The "Key Hack": Forces React to recreate the video tag when the URL changes.
         key={videoUrl} 
         ref={videoRef}
+        src={videoUrl}
         className="w-full h-full rounded-lg"
         controls
         autoPlay
@@ -74,12 +72,17 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ videoUrl, e
         preload="auto"
         crossOrigin="anonymous"
         onError={(e) => {
+          const error = e.currentTarget.error;
+          // Defensive check to avoid logging empty/undefined error objects
           if (videoUrl && videoUrl !== 'undefined') {
-            console.error('Mesh Sync Failed:', e.currentTarget.error?.message, `(Code: ${e.currentTarget.error?.code})`);
+            console.error('Mesh Sync Failed:', {
+              message: error?.message || 'Unknown Media Error',
+              code: error?.code || 'N/A',
+              url: videoUrl
+            });
           }
         }}
       >
-        <source src={videoUrl} type="video/mp4" />
         Your browser does not support the video tag.
       </video>
     </div>
