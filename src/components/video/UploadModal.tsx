@@ -69,7 +69,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
       const videoData = {
         title: capturedTitle,
         description: capturedDescription,
-        url: "https://placeholder.com/video.mp4", 
+        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", 
         author_name: authorName
       };
 

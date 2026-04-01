@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     
     // Automatic swap for placeholder URLs to ensure playback stability
     // Using Google-hosted BigBuckBunny for superior CORS compatibility
-    if (url && url.includes('placeholder.com')) {
+    if (url && (url.includes('placeholder.com') || url.includes('mov_bbb.mp4'))) {
       url = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
     }
     
