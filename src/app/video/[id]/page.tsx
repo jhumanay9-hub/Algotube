@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
@@ -28,30 +29,48 @@ export default function VideoDetailPage() {
   const [localPlayerState, setLocalPlayerState] = useState({ currentTime: 0, isPaused: true });
   
   const [isLiked, setIsLiked] = useState(false);
-  const [isSubscribed, setIsSubscribed] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
       const res = await fetch(`/api/videos?limit=10`);
-      const vids = await res.json();
+      const data = await res.json();
+      
+      // Ensure data is an array before processing
+      const vids = Array.isArray(data) ? data : [];
+      
+      if (!Array.isArray(data) && data.error) {
+        console.error('SQL Mesh Error:', data.error);
+        throw new Error(data.error);
+      }
       
       // Compare ID loosely since it can be string from URL and number from SQL
-      const found = vids.find((v: any) => v.id.toString() === id?.toString());
-      setVideo(found || vids[0]);
-      setRecommendations(vids.filter((v: any) => v.id.toString() !== id?.toString()).slice(0, 3));
+      const found = vids.find((v: any) => v.id?.toString() === id?.toString());
+      
+      setVideo(found || vids[0] || null);
+      setRecommendations(vids.filter((v: any) => v.id?.toString() !== id?.toString()).slice(0, 3));
       
       if (user && found) {
-        const likesRes = await fetch(`/api/likes?userId=${user.uid}`);
-        const likedIds = await likesRes.json();
-        setIsLiked(likedIds.includes(id as string));
+        try {
+          const likesRes = await fetch(`/api/likes?userId=${user.uid}`);
+          const likedData = await likesRes.json();
+          const likedIds = Array.isArray(likedData) ? likedData : [];
+          setIsLiked(likedIds.includes(id as string));
+        } catch (e) {
+          console.error('Likes sync failed, continuing with partial state.');
+        }
       }
-    } catch (e) {
-      console.error('Mesh Sync Failed');
+    } catch (e: any) {
+      console.error('Mesh Sync Failed:', e.message || e);
+      toast({
+        variant: "destructive",
+        title: "Sync Failure",
+        description: "Could not resolve transmission from the SQL mesh."
+      });
     } finally {
       setIsLoading(false);
     }
-  }, [id, user]);
+  }, [id, user, toast]);
 
   useEffect(() => {
     loadData();
@@ -74,15 +93,18 @@ export default function VideoDetailPage() {
       toast({ title: "Auth Required", description: "Sign in to interact with mesh." });
       return;
     }
+    const previousState = isLiked;
     setIsLiked(!isLiked);
     try {
-      await fetch('/api/likes', {
+      const res = await fetch('/api/likes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.uid, videoId: id })
       });
+      if (!res.ok) throw new Error('Like failed');
     } catch (e) {
-      setIsLiked(!isLiked);
+      setIsLiked(previousState);
+      toast({ variant: "destructive", title: "Action Failed", description: "SQL registry rejected interaction." });
     }
   };
 
@@ -91,6 +113,17 @@ export default function VideoDetailPage() {
       <div className="flex flex-col h-screen items-center justify-center gap-4 bg-background">
         <Loader2 className="animate-spin text-accent" size={48} />
         <p className="font-code text-sm tracking-widest text-accent uppercase">Resolving SQL Mesh...</p>
+      </div>
+    );
+  }
+
+  if (!video) {
+    return (
+      <div className="flex flex-col h-screen overflow-hidden">
+        <Navbar />
+        <div className="flex flex-1 items-center justify-center text-muted-foreground font-code uppercase text-xs">
+          Transmission not found in SQL registry
+        </div>
       </div>
     );
   }
