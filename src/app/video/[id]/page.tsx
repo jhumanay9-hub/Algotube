@@ -62,6 +62,7 @@ export default function VideoDetailPage() {
         if (!found.url || found.url.includes('placeholder.com') || found.url.includes('undefined')) {
           found.url = STABLE_FALLBACK_URL;
         }
+        console.log("Mesh Sync: Passing sanitized video URL:", found.url);
       }
 
       setVideo(found || vids[0] || null);

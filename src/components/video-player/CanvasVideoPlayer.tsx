@@ -55,17 +55,23 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
     let animationId: number;
 
     const drawFrame = () => {
-      if (!video.paused && !video.ended) {
+      // Only draw if video is ready and playing
+      if (video.readyState >= 2 && !video.paused && !video.ended) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
-        ctx.fillStyle = 'rgba(116, 222, 236, 0.1)';
+        // Technical overlay
+        ctx.fillStyle = 'rgba(116, 222, 236, 0.15)';
         ctx.font = '12px "Space Grotesk"';
-        ctx.fillText(`Stream: ${quality} | SQL-Sync Active`, 20, 30);
+        ctx.fillText(`Stream: ${quality} | Mesh Sync Active`, 20, 30);
         
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+        // Scanline effect
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.01)';
         for (let i = 0; i < canvas.height; i += 4) {
           ctx.fillRect(0, i, canvas.width, 1);
         }
+        animationId = requestAnimationFrame(drawFrame);
+      } else if (!video.paused && !video.ended) {
+        // Retry loop if video isn't quite ready but should be playing
         animationId = requestAnimationFrame(drawFrame);
       }
     };
@@ -89,6 +95,9 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
     video.addEventListener('timeupdate', handleTimeUpdate);
+
+    // Initial draw in case it's already playing
+    if (!video.paused) drawFrame();
 
     return () => {
       if (animationId) cancelAnimationFrame(animationId);
@@ -122,20 +131,18 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
       onMouseEnter={() => setShowControls(true)}
       onMouseLeave={() => isPlaying && setShowControls(false)}
     >
-      {src && (
-        <video
-          ref={videoRef}
-          src={src}
-          className="hidden"
-          crossOrigin="anonymous"
-          playsInline
-          preload="metadata"
-          onError={(e) => {
-            const errorCode = e.currentTarget.error?.code;
-            console.error(`Video Sync Error in SQL Mesh: Code ${errorCode}. (1=Abort, 2=Network, 3=Decode, 4=Source Not Supported/CORS)`);
-          }}
-        />
-      )}
+      <video
+        ref={videoRef}
+        {...(src ? { src } : {})}
+        className="hidden"
+        crossOrigin="anonymous"
+        playsInline
+        preload="metadata"
+        onError={(e) => {
+          const error = e.currentTarget.error;
+          console.error(`Video Sync Error in SQL Mesh: ${error?.message} (Code: ${error?.code})`);
+        }}
+      />
       <canvas
         ref={canvasRef}
         width={1920}
