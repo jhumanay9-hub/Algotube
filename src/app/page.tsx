@@ -5,50 +5,32 @@ import React, { useMemo, useState, useEffect } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import VideoCard from '@/components/video-card/VideoCard';
-import { heapSortTrending } from '@/lib/sorting';
-import { TrendingUp, Sparkles, Zap, Heart, DatabaseZap, Loader2 } from 'lucide-react';
+import { TrendingUp, Sparkles, Heart, DatabaseZap, Loader2 } from 'lucide-react';
 import { useUser } from '@/firebase';
 import { cn } from '@/lib/utils';
-import { getB2Videos } from '@/app/actions/b2-store';
 
 const CATEGORIES = ["All", "Entertainment", "Social Life", "Computer Science", "Physics", "Cybersecurity"];
-
-function shuffle<T>(array: T[]): T[] {
-  const result = [...array];
-  for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
-}
 
 export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [videos, setVideos] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { user } = useUser();
 
   useEffect(() => {
     async function loadData() {
       setIsLoading(true);
-      const b2Videos = await getB2Videos();
-      setVideos(b2Videos);
-      setIsLoading(false);
+      try {
+        const res = await fetch(`/api/videos?category=${selectedCategory}`);
+        const data = await res.json();
+        setVideos(Array.isArray(data) ? data : []);
+      } catch (e) {
+        console.error('Turso Mesh Sync Error:', e);
+      } finally {
+        setIsLoading(false);
+      }
     }
     loadData();
-  }, []);
-
-  const displayVideos = useMemo(() => {
-    if (selectedCategory === "All") {
-      return videos.length > 0 ? shuffle(videos).slice(0, 24) : [];
-    }
-    return videos.filter(v => 
-      v.category === selectedCategory || 
-      (v as any).tags?.some((t: string) => t.toLowerCase() === selectedCategory.toLowerCase())
-    );
-  }, [videos, selectedCategory]);
-
-  const trendingVideos = useMemo(() => heapSortTrending(displayVideos as any), [displayVideos]);
+  }, [selectedCategory]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -74,7 +56,7 @@ export default function Home() {
               </button>
             ))}
             <div className="ml-auto flex items-center gap-2 px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-[9px] text-accent font-code whitespace-nowrap">
-              <DatabaseZap size={10} /> B2 MESH ACTIVE
+              <DatabaseZap size={10} /> TURSO SQL MESH ACTIVE
             </div>
           </div>
 
@@ -86,13 +68,13 @@ export default function Home() {
               <div className="relative z-10 max-w-2xl">
                 <div className="flex items-center gap-2 mb-4 text-accent">
                   <Sparkles size={20} />
-                  <span className="font-code text-xs tracking-widest uppercase">B2 Cloud Mesh: Operational</span>
+                  <span className="font-code text-xs tracking-widest uppercase">Turso DB: Operational</span>
                 </div>
                 <h1 className="text-5xl font-headline font-bold mb-4 bg-gradient-to-r from-white via-white to-accent bg-clip-text text-transparent leading-tight">
-                  Next Gen <br/>Social Streaming
+                  Next Gen <br/>SQL Mesh discovery
                 </h1>
                 <p className="text-muted-foreground font-body leading-relaxed mb-8 text-lg">
-                  Powered by Backblaze B2. Experience zero-friction transmission discovery across the global social mesh.
+                  Powered by Turso. Ultra-low latency transmission metadata served from the global SQL edge.
                 </p>
               </div>
             </div>
@@ -110,13 +92,19 @@ export default function Home() {
           {isLoading ? (
              <div className="flex flex-col items-center justify-center py-24 gap-4 opacity-50">
                <Loader2 className="animate-spin text-accent" size={40} />
-               <p className="font-code text-xs tracking-widest uppercase">Syncing with B2 Registry...</p>
+               <p className="font-code text-xs tracking-widest uppercase">Querying Turso Nodes...</p>
              </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-12">
-              {trendingVideos.map((video) => (
-                <VideoCard key={video.id} video={video as any} />
-              ))}
+              {videos.length > 0 ? (
+                videos.map((video) => (
+                  <VideoCard key={video.id} video={video as any} />
+                ))
+              ) : (
+                <div className="col-span-full py-12 text-center opacity-30">
+                  <p className="font-code text-xs">NO TRANSMISSIONS DETECTED IN SQL REGISTRY</p>
+                </div>
+              )}
             </div>
           )}
         </main>
