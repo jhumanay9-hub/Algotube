@@ -15,6 +15,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
+const STABLE_FALLBACK_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+
 /**
  * VideoDetailPage - SQL Engagement Mesh
  * Handles real-time hydration of Like/Dislike/Favorite states from Turso.
@@ -53,8 +55,15 @@ export default function VideoDetailPage() {
       
       const vData = await vRes.json();
       const vids = Array.isArray(vData) ? vData : [];
-      const found = vids.find((v: any) => v.id?.toString() === vidStr);
+      let found = vids.find((v: any) => v.id?.toString() === vidStr);
       
+      // Sanitization guard for frontend stability
+      if (found) {
+        if (!found.url || found.url.includes('placeholder.com') || found.url.includes('undefined')) {
+          found.url = STABLE_FALLBACK_URL;
+        }
+      }
+
       setVideo(found || vids[0] || null);
       setRecommendations(vids.filter((v: any) => v.id?.toString() !== vidStr).slice(0, 3));
       

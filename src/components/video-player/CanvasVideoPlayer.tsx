@@ -122,20 +122,25 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
       onMouseEnter={() => setShowControls(true)}
       onMouseLeave={() => isPlaying && setShowControls(false)}
     >
-      <video
-        ref={videoRef}
-        {...(src ? { src } : {})}
-        className="hidden"
-        crossOrigin="anonymous"
-        playsInline
-        preload="metadata"
-        onError={() => console.error('Video Sync Error in SQL Mesh')}
-      />
+      {src && (
+        <video
+          ref={videoRef}
+          src={src}
+          className="hidden"
+          crossOrigin="anonymous"
+          playsInline
+          preload="metadata"
+          onError={(e) => {
+            const errorCode = e.currentTarget.error?.code;
+            console.error(`Video Sync Error in SQL Mesh: Code ${errorCode}. (1=Abort, 2=Network, 3=Decode, 4=Source Not Supported/CORS)`);
+          }}
+        />
+      )}
       <canvas
         ref={canvasRef}
         width={1920}
         height={1080}
-        className="w-full h-full cursor-pointer z-0"
+        className="w-full h-full cursor-pointer z-0 pointer-events-auto"
         onClick={togglePlay}
       />
 
