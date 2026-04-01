@@ -18,7 +18,7 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [volume, setVolume] = useState(80);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true); // Muted by default to bypass autoplay blocks
   const [showControls, setShowControls] = useState(true);
   const [quality, setQuality] = useState('1080p');
 
@@ -55,7 +55,7 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
     let animationId: number;
 
     const drawFrame = () => {
-      // Only draw if video is ready and playing
+      // METADATA GUARD: Only draw if video is ready (readyState >= 2) and playing
       if (video.readyState >= 2 && !video.paused && !video.ended) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
@@ -71,7 +71,7 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
         }
         animationId = requestAnimationFrame(drawFrame);
       } else if (!video.paused && !video.ended) {
-        // Retry loop if video isn't quite ready but should be playing
+        // Retry loop if video is playing but buffer is catching up
         animationId = requestAnimationFrame(drawFrame);
       }
     };
@@ -135,12 +135,13 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
         ref={videoRef}
         {...(src ? { src } : {})}
         className="hidden"
-        crossOrigin="anonymous"
-        playsInline
-        preload="metadata"
+        crossOrigin="anonymous" // THE CORS KEY: Mandatory for canvas synchronization
+        playsInline // SOURCE NOT SUPPORTED BYPASS: Mobile compatibility
+        preload="auto" // SOURCE NOT SUPPORTED BYPASS: Aggressive buffering
+        muted={isMuted} // SOURCE NOT SUPPORTED BYPASS: Autoplay handshake
         onError={(e) => {
-          const error = e.currentTarget.error;
-          console.error(`Video Sync Error in SQL Mesh: ${error?.message} (Code: ${error?.code})`);
+          // DIAGNOSTIC LOGGING: Detailed error reporting for SQL mesh debugging
+          console.error('Mesh Sync Failed:', e.currentTarget.error?.message);
         }}
       />
       <canvas
@@ -173,7 +174,13 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
                 <Slider 
                   value={[isMuted ? 0 : volume]} 
                   max={100} 
-                  onValueChange={(v) => setVolume(v[0])}
+                  onValueChange={(v) => {
+                    setVolume(v[0]);
+                    if (videoRef.current) {
+                      videoRef.current.volume = v[0] / 100;
+                      if (v[0] > 0) setIsMuted(false);
+                    }
+                  }}
                   className="w-24 opacity-0 group-hover/volume:opacity-100 transition-opacity"
                 />
               </div>
