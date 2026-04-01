@@ -79,6 +79,7 @@ export default function ShortsPlayer({ video }: ShortsPlayerProps) {
           muted={isMuted}
           onClick={togglePlay}
           crossOrigin="anonymous"
+          preload="metadata"
         />
 
         {!isPlaying && (

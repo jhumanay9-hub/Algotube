@@ -124,6 +124,8 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
         src={src || undefined}
         className="hidden"
         crossOrigin="anonymous"
+        playsInline
+        preload="metadata"
       />
       <canvas
         ref={canvasRef}
