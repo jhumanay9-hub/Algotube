@@ -25,9 +25,11 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
   useEffect(() => {
     if (!videoRef.current || !externalState) return;
     
-    // Threshold for seeking to avoid jitter
-    if (Math.abs(videoRef.current.currentTime - externalState.currentTime) > 1) {
-      videoRef.current.currentTime = externalState.currentTime;
+    const targetTime = externalState.currentTime;
+    
+    // Safety check for finite value
+    if (isFinite(targetTime) && Math.abs(videoRef.current.currentTime - targetTime) > 1) {
+      videoRef.current.currentTime = targetTime;
     }
 
     if (externalState.isPaused && !videoRef.current.paused) {
@@ -76,7 +78,9 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
     const handlePause = () => setIsPlaying(false);
     
     const handleTimeUpdate = () => {
-      setProgress((video.currentTime / video.duration) * 100);
+      if (video.duration && isFinite(video.duration) && video.duration > 0) {
+        setProgress((video.currentTime / video.duration) * 100);
+      }
     };
 
     video.addEventListener('play', handlePlay);
@@ -100,9 +104,12 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
   };
 
   const handleProgressChange = (val: number[]) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = (val[0] / 100) * videoRef.current.duration;
-      setProgress(val[0]);
+    if (videoRef.current && isFinite(videoRef.current.duration) && videoRef.current.duration > 0) {
+      const newTime = (val[0] / 100) * videoRef.current.duration;
+      if (isFinite(newTime)) {
+        videoRef.current.currentTime = newTime;
+        setProgress(val[0]);
+      }
     }
   };
 
@@ -169,7 +176,7 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
         </div>
       </div>
       
-      {!isPlaying && !videoRef.current?.currentTime && (
+      {!isPlaying && (!videoRef.current || !videoRef.current.currentTime) && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-none">
           <div className="w-20 h-20 rounded-full bg-accent/20 border border-accent/40 flex items-center justify-center neon-glow">
             <Play size={40} className="text-accent fill-accent translate-x-1" />
