@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useRef, useEffect, useState } from 'react';
@@ -28,7 +27,7 @@ export default function ShortsPlayer({ video }: ShortsPlayerProps) {
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting) {
+          if (entry.isIntersecting && video.url) {
             videoRef.current?.play().catch(() => {});
             setIsPlaying(true);
           } else {
@@ -45,11 +44,12 @@ export default function ShortsPlayer({ video }: ShortsPlayerProps) {
     }
 
     return () => observer.disconnect();
-  }, []);
+  }, [video.url]);
 
   const togglePlay = () => {
+    if (!video.url) return;
     if (videoRef.current?.paused) {
-      videoRef.current.play();
+      videoRef.current.play().catch(e => console.warn('Shorts Play Blocked', e));
       setIsPlaying(true);
     } else {
       videoRef.current?.pause();
@@ -64,7 +64,6 @@ export default function ShortsPlayer({ video }: ShortsPlayerProps) {
       ref={containerRef}
       className="h-full w-full flex items-center justify-center snap-start relative bg-black"
     >
-      {/* Dynamic Blurred Background */}
       <div 
         className="absolute inset-0 z-0 opacity-30 blur-[100px] pointer-events-none"
         style={{ backgroundImage: `url(${thumbnail})`, backgroundSize: 'cover' }}
@@ -73,7 +72,7 @@ export default function ShortsPlayer({ video }: ShortsPlayerProps) {
       <div className="relative z-10 h-full max-h-[85vh] aspect-[9/16] bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/10 group">
         <video
           ref={videoRef}
-          src={video.url}
+          {...(video.url ? { src: video.url } : {})}
           className="w-full h-full object-cover cursor-pointer"
           loop
           playsInline
@@ -91,7 +90,6 @@ export default function ShortsPlayer({ video }: ShortsPlayerProps) {
           </div>
         )}
 
-        {/* Content Info Overlay - pointer-events-none so we can click the video */}
         <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 via-black/40 to-transparent pointer-events-none">
           <div className="flex items-center gap-3 mb-4">
             <Avatar className="h-10 w-10 border-2 border-accent pointer-events-auto">
@@ -116,7 +114,6 @@ export default function ShortsPlayer({ video }: ShortsPlayerProps) {
           </div>
         </div>
 
-        {/* Action Sidebar */}
         <div className="absolute right-4 bottom-24 flex flex-col gap-6 items-center z-20">
           <div className="flex flex-col items-center gap-1 group/btn cursor-pointer">
             <div className="w-12 h-12 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center hover:bg-accent/20 hover:border-accent/40 transition-all">

@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
@@ -47,7 +46,7 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
   useEffect(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas) return;
+    if (!video || !canvas || !src) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -55,7 +54,6 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
     let animationId: number;
 
     const drawFrame = () => {
-      // Optimization: Only draw and request frames if playing
       if (!video.paused && !video.ended) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
@@ -97,11 +95,11 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
       video.removeEventListener('pause', handlePause);
       video.removeEventListener('timeupdate', handleTimeUpdate);
     };
-  }, [quality]);
+  }, [quality, src]);
 
   const togglePlay = () => {
     if (videoRef.current?.paused) {
-      videoRef.current.play();
+      videoRef.current.play().catch(e => console.warn('Playback blocked', e));
     } else {
       videoRef.current?.pause();
     }
@@ -125,11 +123,12 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
     >
       <video
         ref={videoRef}
-        src={src || undefined}
+        {...(src ? { src } : {})}
         className="hidden"
         crossOrigin="anonymous"
         playsInline
         preload="metadata"
+        onVideoError={() => console.error('Video Sync Error in SQL Mesh')}
       />
       <canvas
         ref={canvasRef}
@@ -139,9 +138,7 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
         onClick={togglePlay}
       />
 
-      {/* Overlay - pointer-events-none so we can click the canvas through it */}
       <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'} pointer-events-none z-10`}>
-        {/* Controls Container - pointer-events-auto so we can interact with buttons */}
         <div className="absolute bottom-0 left-0 right-0 p-6 flex flex-col gap-4 pointer-events-auto">
           <Slider 
             value={[progress]} 

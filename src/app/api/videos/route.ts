@@ -3,7 +3,7 @@ import { turso } from '@/lib/turso';
 
 /**
  * Handles Global Video Discovery from Turso SQL Mesh
- * Updated: Returns [] on error to prevent console noise.
+ * Updated: Automatically sanitizes and provides fallbacks for broken metadata.
  */
 export async function GET(request: Request) {
   try {
@@ -15,10 +15,18 @@ export async function GET(request: Request) {
       args: [limit]
     });
     
-    return NextResponse.json(result.rows);
+    // Sanitize URLs on the fly to prevent player crashes
+    const sanitizedRows = result.rows.map(row => {
+      let videoUrl = row.url as string;
+      if (!videoUrl || videoUrl.includes('placeholder.com') || videoUrl.includes('undefined')) {
+        videoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+      }
+      return { ...row, url: videoUrl };
+    });
+    
+    return NextResponse.json(sanitizedRows);
   } catch (error: any) {
     console.error('Turso GET Videos Error:', error);
-    // Return empty array instead of 500 to keep UI stable
     return NextResponse.json([]);
   }
 }
@@ -32,12 +40,10 @@ export async function POST(request: Request) {
     let { title, description, url, author_name } = await request.json();
     
     // Automatic swap for placeholder URLs to ensure playback stability
-    // Using Google-hosted BigBuckBunny for superior CORS compatibility
-    if (url && (url.includes('placeholder.com') || url.includes('mov_bbb.mp4'))) {
+    if (!url || url.includes('placeholder.com') || url.includes('mov_bbb.mp4')) {
       url = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
     }
     
-    // Prepared statement initializing engagement counters to 0
     await turso.execute({
       sql: `INSERT INTO videos (title, description, url, author_name, likesCount, dislikesCount) 
             VALUES (?, ?, ?, ?, 0, 0)`,
