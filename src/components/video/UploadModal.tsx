@@ -25,13 +25,14 @@ interface UploadModalProps {
 /**
  * UploadModal - Firebase Media + Turso Metadata Integration
  * Broadcasts video files to Firebase Storage and metadata to Turso SQL mesh.
+ * Optimized for 4GB RAM devices.
  */
 export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState(forcedCategory || 'Social Media');
+  const [category, setCategory] = useState(forcedCategory || 'Social Life');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   
@@ -54,34 +55,43 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
     
     try {
       // 1. AI Safety & SEO Analysis
+      // We run this first to ensure content is safe before hitting storage
       const aiResult = await analyzeVideoContent({ title, description });
 
       if (!aiResult.isSafe) {
-        toast({ variant: "destructive", title: "Transmission Denied", description: aiResult.safetyReason || "Content flagged by safety mesh." });
+        toast({ 
+          variant: "destructive", 
+          title: "Transmission Denied", 
+          description: aiResult.safetyReason || "Content flagged by AI safety mesh." 
+        });
         setIsProcessing(false);
         return;
       }
 
       // 2. Prepare Firebase Storage Path
-      const fileName = `${Date.now()}-${selectedFile.name.replace(/\s+/g, '_')}`;
+      const timestamp = Date.now();
+      const sanitizedName = selectedFile.name.replace(/[^a-zA-Z0-9.]/g, '_');
+      const fileName = `${timestamp}-${sanitizedName}`;
       const storageRef = ref(storage, `videos/${user.uid}/${fileName}`);
       
-      // Release file from state-based memory tracking early by creating local ref
+      // Memory Optimization: Clear selectedFile from state early
+      // Create a local reference for the actual upload function
       const fileToUpload = selectedFile;
-      setSelectedFile(null); // Clear state early for 4GB RAM optimization
+      setSelectedFile(null); 
 
-      // 3. Resumable Upload to Firebase
+      // 3. Initiate Resumable Upload to Firebase Storage
       const uploadTask = uploadBytesResumable(storageRef, fileToUpload);
 
       uploadTask.on('state_changed', 
         (snapshot) => {
+          // Track upload progress in real-time
           const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
           setUploadProgress(progress);
         }, 
         (error) => {
           console.error('Firebase Storage Error:', error);
-          let message = "Transmission failed.";
-          if (error.code === 'storage/unauthorized') message = "Permission denied in Cloud Storage.";
+          let message = "Transmission interrupted.";
+          if (error.code === 'storage/unauthorized') message = "Permission denied in Cloud Mesh.";
           if (error.code === 'storage/canceled') message = "Broadcast canceled by user.";
           setUploadError(message);
           setIsProcessing(false);
@@ -100,7 +110,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
             description,
             aiSummary: aiResult.summary,
             videoUrl: downloadURL,
-            thumbnail: `https://picsum.photos/seed/${Math.floor(Math.random() * 1000)}/640/360`,
+            thumbnail: `https://picsum.photos/seed/${timestamp}/640/360`,
             uploaderId: user.uid,
             uploadDate: new Date().toISOString(),
             category,
@@ -115,19 +125,25 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
             body: JSON.stringify(videoData)
           });
 
-          if (!tursoRes.ok) throw new Error('Turso Mesh Write Failed');
+          if (!tursoRes.ok) throw new Error('Turso SQL Mesh Write Failed');
 
-          toast({ title: "Broadcast Successful", description: "Metadata persisted to Turso SQL Mesh." });
+          toast({ 
+            title: "Broadcast Successful", 
+            description: "Transmission finalized and persisted to SQL Mesh." 
+          });
+          
+          // Cleanup
           onClose();
           setIsProcessing(false);
           setTitle('');
           setDescription('');
+          setUploadProgress(0);
         }
       );
 
     } catch (error: any) {
-      console.error('Mesh Failure:', error);
-      setUploadError(error?.message || "Transmission interrupted.");
+      console.error('Mesh Sync Failure:', error);
+      setUploadError(error?.message || "Sync interrupted by node failure.");
       setIsProcessing(false);
     }
   };
@@ -145,7 +161,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
           {uploadError && (
             <Alert variant="destructive" className="mb-6 bg-red-950/20 border-red-500/20">
               <AlertCircle className="h-4 w-4 text-red-500" />
-              <AlertTitle className="text-red-500 font-bold">Broadcast Interrupted</AlertTitle>
+              <AlertTitle className="text-red-500 font-bold">Broadcast Error</AlertTitle>
               <AlertDescription className="text-red-200/80 text-xs">
                 {uploadError}
               </AlertDescription>
@@ -158,9 +174,9 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
               <div className="w-full max-w-xs space-y-4">
                 <Progress value={uploadProgress} className="h-2 bg-white/5" />
                 <p className="font-code text-sm font-bold text-accent uppercase tracking-widest animate-pulse">
-                  Broadcasting: {Math.round(uploadProgress)}%
+                  Syncing: {Math.round(uploadProgress)}%
                 </p>
-                <p className="text-[10px] text-muted-foreground uppercase">Syncing Cloud Nodes...</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Broadcasting to Firebase Storage Node...</p>
               </div>
             </div>
           ) : (
@@ -169,7 +185,13 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
                 onClick={() => fileInputRef.current?.click()} 
                 className="border-2 border-dashed border-white/5 rounded-2xl p-12 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-accent/40 hover:bg-white/5 transition-all group"
               >
-                <input type="file" ref={fileInputRef} onChange={e => setSelectedFile(e.target.files?.[0] || null)} className="hidden" accept=".mp4,.mov,.webm" />
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  onChange={e => setSelectedFile(e.target.files?.[0] || null)} 
+                  className="hidden" 
+                  accept=".mp4,.mov,.webm" 
+                />
                 {selectedFile ? (
                   <div className="text-center">
                     <div className="w-16 h-16 rounded-2xl bg-accent/10 flex items-center justify-center mx-auto mb-4">
@@ -183,7 +205,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
                     <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center group-hover:bg-accent/10 transition-colors">
                       <Upload size={32} className="text-white/20 group-hover:text-accent transition-colors" />
                     </div>
-                    <p className="text-sm font-headline font-bold text-white/40">Select Transmission Stream</p>
+                    <p className="text-sm font-headline font-bold text-white/40">Select Video Data Stream</p>
                     <p className="text-[10px] text-muted-foreground uppercase tracking-widest">MP4, MOV, or WEBM</p>
                   </>
                 )}
