@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -51,6 +52,7 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
       const availableRooms = Array.isArray(data) ? data : [];
       setRooms(availableRooms);
       
+      // Auto-join first room or create one if user is leader/first
       if (!currentRoom && availableRooms.length > 0) {
         setCurrentRoom(availableRooms[0]);
       }
@@ -71,13 +73,20 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
       if (currentRoom) {
         // Poll messages and members
         fetch(`/api/chat/messages?roomId=${currentRoom.id}`).then(r => r.json()).then(msgs => {
-          if (Array.isArray(msgs)) setMessages(msgs);
+          if (Array.isArray(msgs)) {
+            setMessages(msgs);
+            // Tail-recursion logic: scroll to bottom if new messages
+            if (scrollRef.current) {
+              scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            }
+          }
         });
+        
         fetch(`/api/chat/members?roomId=${currentRoom.id}`).then(r => r.json()).then(mems => {
           if (Array.isArray(mems)) setMembers(mems);
         });
 
-        // Watch Party Sync Logic
+        // Watch Party Sync Logic (2s polling)
         if (activeTab === 'private' && user) {
           fetch(`/api/watch-party?roomId=${currentRoom.id}`).then(r => r.json()).then(syncData => {
             if (syncData && syncData.leaderId !== user.uid && onSyncState) {
@@ -86,8 +95,8 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
                 currentTime: syncData.currentTime, 
                 isPaused: syncData.isPaused === 1 || syncData.isPaused === true 
               });
-            } else if (syncData?.leaderId === user.uid && playerState) {
-              // Broadcast as leader
+            } else if ((!syncData || syncData.leaderId === user.uid) && playerState) {
+              // Broadcast as leader (or if no leader exists, become leader)
               fetch('/api/watch-party', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -185,6 +194,11 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
                       <AvatarFallback className="text-[6px]">{m.userName?.[0]}</AvatarFallback>
                     </Avatar>
                   ))}
+                  {members.length > 3 && (
+                    <div className="w-5 h-5 rounded-full bg-accent/20 border border-background flex items-center justify-center text-[6px] font-bold text-accent">
+                      +{members.length - 3}
+                    </div>
+                  )}
                 </div>
               </div>
               <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-black/20">
@@ -196,7 +210,7 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
                     </Avatar>
                     <div className={cn(
                       "max-w-[80%] p-2.5 rounded-xl text-[11px]",
-                      m.userId === user?.uid ? "bg-accent text-background font-bold" : "bg-white/5 border border-white/10"
+                      m.userId === user?.uid ? "bg-accent text-background font-bold shadow-lg" : "bg-white/5 border border-white/10"
                     )}>
                       <p>{m.content}</p>
                     </div>
@@ -206,8 +220,23 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
               <MessageInput onSend={() => handlePostMessage(false)} value={newComment} onChange={setNewComment} disabled={isSubmitting} user={user} />
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center p-8 text-center opacity-30">
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center opacity-30 gap-4">
+              <Users size={48} />
               <p className="text-[10px] font-headline font-bold uppercase tracking-widest">No watch parties initiated on this node.</p>
+              {user && (
+                <Button 
+                  onClick={() => {
+                    fetch('/api/chat/rooms', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ videoId, name: 'Lobby 1', creatorId: user.uid })
+                    }).then(() => loadRooms());
+                  }}
+                  className="bg-accent text-background font-bold text-[10px] px-6 rounded-full"
+                >
+                  START PARTY
+                </Button>
+              )}
             </div>
           )}
         </TabsContent>
@@ -222,7 +251,7 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
 }
 
 function MessageInput({ onSend, value, onChange, disabled, user }: any) {
-  if (!user) return <div className="p-4 text-center text-[10px] font-code text-muted-foreground uppercase">Sign in to participate</div>;
+  if (!user) return <div className="p-4 text-center text-[10px] font-code text-muted-foreground uppercase bg-white/5">Sign in to participate</div>;
   
   return (
     <div className="p-4 bg-white/5 border-t border-white/10 relative">
