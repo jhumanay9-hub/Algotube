@@ -9,7 +9,7 @@ import ConversationPanel from '@/components/layout/ConversationPanel';
 import CanvasVideoPlayer from '@/components/video-player/CanvasVideoPlayer';
 import VideoCard from '@/components/video-card/VideoCard';
 import { useUser } from '@/firebase';
-import { ThumbsUp, ThumbsDown, Star, Eye, Sparkles, Loader2, Users } from 'lucide-react';
+import { ThumbsUp, ThumbsDown, Star, Eye, Sparkles, Loader2, Users, DatabaseZap, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
@@ -19,7 +19,7 @@ const STABLE_FALLBACK_URL = "https://commondatastorage.googleapis.com/gtv-videos
 
 /**
  * VideoDetailPage - SQL Engagement Mesh
- * Hardened with aggressive URL verification to prevent Code 4 Format Errors.
+ * Refactored with strict .trim() sanitization and diagnostic test tools.
  */
 export default function VideoDetailPage() {
   const { id } = useParams();
@@ -56,15 +56,16 @@ export default function VideoDetailPage() {
       let found = vids.find((v: any) => v.id?.toString() === vidStr);
       
       if (found) {
-        // Aggressive URL Sanitization: Prevents "Format Error" by ensuring source is actually a video.
-        let videoUrl = (found.url || "").trim();
+        // DATA SANITIZATION: Aggressively .trim() and validate the transmission URL
+        let videoUrl = (found.url || "").toString().trim();
+        
         const isInvalid = 
           !videoUrl || 
-          videoUrl.includes('placeholder.com') || 
-          videoUrl.includes('picsum.photos') || 
           videoUrl === 'undefined' || 
           videoUrl === '' ||
-          (!videoUrl.toLowerCase().endsWith('.mp4') && !videoUrl.toLowerCase().endsWith('.mov') && !videoUrl.includes('googlevideo'));
+          videoUrl.includes('placeholder.com') || 
+          videoUrl.includes('picsum.photos') || 
+          (!videoUrl.toLowerCase().endsWith('.mp4') && !videoUrl.toLowerCase().endsWith('.mov') && !videoUrl.includes('googlevideo') && !videoUrl.includes('googleapis'));
 
         if (isInvalid) {
           videoUrl = STABLE_FALLBACK_URL;
@@ -72,11 +73,7 @@ export default function VideoDetailPage() {
         found.url = videoUrl;
       }
 
-      console.log('SQL Mesh Data Verified:', found);
-      if (found?.url) {
-        console.log('Final URL being sent to Player:', found.url);
-      }
-
+      console.log('SQL Mesh Verified Data:', found);
       setVideo(found || null);
       setRecommendations(vids.filter((v: any) => v.id?.toString() !== vidStr).slice(0, 3));
       
@@ -107,6 +104,18 @@ export default function VideoDetailPage() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  const handleTestLink = () => {
+    if (!video) return;
+    setVideo((prev: any) => ({
+      ...prev,
+      url: STABLE_FALLBACK_URL
+    }));
+    toast({ 
+      title: "Diagnostic Mode", 
+      description: "Direct link forced. If playback starts, your SQL registry string format was invalid." 
+    });
+  };
 
   const handleInteraction = async (type: 'likes' | 'dislikes' | 'favorites') => {
     if (!user) {
@@ -156,12 +165,12 @@ export default function VideoDetailPage() {
     return (
       <div className="flex flex-col h-screen items-center justify-center gap-4 bg-background">
         <Loader2 className="animate-spin text-accent" size={48} />
-        <p className="font-code text-sm tracking-widest text-accent uppercase">Querying Registry...</p>
+        <p className="font-code text-sm tracking-widest text-accent uppercase animate-pulse">Querying Registry...</p>
       </div>
     );
   }
 
-  if (!video || !video.url) {
+  if (!video) {
     return (
       <div className="flex flex-col h-screen overflow-hidden">
         <Navbar />
@@ -170,7 +179,6 @@ export default function VideoDetailPage() {
             <Users size={40} className="opacity-20" />
           </div>
           <h2 className="text-xl font-headline font-bold text-white uppercase tracking-widest">Transmission Not Found</h2>
-          <p className="font-code text-[10px] uppercase">Data packet missing in SQL registry</p>
           <Button variant="outline" onClick={() => window.history.back()} className="mt-4 rounded-xl">Return to Hub</Button>
         </div>
       </div>
@@ -184,6 +192,22 @@ export default function VideoDetailPage() {
         <Sidebar />
         <main className="flex-1 overflow-y-auto p-4 pt-0 custom-scrollbar flex flex-col xl:flex-row gap-6">
           <div className="flex-1 flex flex-col gap-6">
+            
+            {/* DIAGNOSTIC TEST BAR */}
+            <div className="flex items-center justify-between px-4 py-2 bg-accent/5 border border-accent/20 rounded-2xl">
+              <div className="flex items-center gap-2 text-[10px] font-code text-accent uppercase">
+                <DatabaseZap size={12} /> SQL Mesh Protocol 3.1
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleTestLink}
+                className="h-7 px-3 rounded-lg text-[9px] font-bold text-accent border border-accent/30 hover:bg-accent/10"
+              >
+                <Zap size={10} className="mr-1.5" /> TEST DIRECT LINK
+              </Button>
+            </div>
+
             <div className="relative aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl group border border-white/5">
               {!isLoading && video?.url ? (
                 <CanvasVideoPlayer 
