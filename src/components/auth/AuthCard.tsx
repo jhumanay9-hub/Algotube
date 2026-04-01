@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -7,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { saveB2UserProfile } from '@/app/actions/b2-store';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Eye, EyeOff, CheckCircle2, XCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -57,27 +55,28 @@ export function AuthCard() {
     try {
       if (isLogin) {
         await signInWithEmailAndPassword(auth, email, password);
-        toast({ title: "Welcome back!", description: "Successfully signed in via Auth mesh." });
+        toast({ title: "Welcome back!", description: "Successfully signed in via SQL mesh." });
       } else {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
         await updateProfile(user, { displayName: fullName });
 
-        // Create B2 Profile instead of Firestore
-        const userProfile = {
+        // PERSIST TO TURSO SQL PROFILES
+        const profileData = {
           id: user.uid,
           username: fullName.toLowerCase().replace(/\s+/g, '_'),
           email: email,
-          fullName: fullName,
-          joinedAt: new Date().toISOString(),
-          role: 'viewer',
-          interests: [],
+          joinedAt: new Date().toISOString()
         };
 
-        await saveB2UserProfile(user.uid, userProfile);
+        await fetch('/api/profiles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(profileData)
+        });
         
-        toast({ title: "Account created!", description: "Profile persisted to B2 mesh." });
+        toast({ title: "Account created!", description: "Profile persisted to SQL mesh." });
       }
       router.push('/');
     } catch (error: any) {

@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useMemo, useState, useEffect } from 'react';
@@ -7,42 +6,31 @@ import Sidebar from '@/components/layout/Sidebar';
 import VideoCard from '@/components/video-card/VideoCard';
 import { useUser } from '@/firebase';
 import { Layers, Users, Loader2, BellRing, DatabaseZap } from 'lucide-react';
-import { getB2Subscriptions } from '@/app/actions/b2-social';
-import { getB2Videos } from '@/app/actions/b2-store';
+import { getTursoVideos } from '@/app/actions/turso-actions';
 import Link from 'next/link';
 
-/**
- * SubscriptionsPage
- * 
- * This page handles the discovery of videos from creators the user is subscribed to.
- * It uses the B2 Social Mesh (Backblaze) instead of Firestore to avoid permission/proxy errors.
- */
 export default function SubscriptionsPage() {
   const { user, isUserLoading } = useUser();
-  
   const [subscribedCreatorIds, setSubscribedCreatorIds] = useState<string[]>([]);
   const [allVideos, setAllVideos] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Sync with Backblaze B2 Social Nodes
   useEffect(() => {
     async function syncMesh() {
       if (!user) {
         setIsLoading(false);
         return;
       }
-      
       setIsLoading(true);
       try {
-        // Fetch both subscription manifest and the global video registry from B2
-        const [ids, vids] = await Promise.all([
-          getB2Subscriptions(user.uid),
-          getB2Videos()
+        const [subIds, vids] = await Promise.all([
+          fetch(`/api/subscriptions?userId=${user.uid}`).then(r => r.json()),
+          getTursoVideos()
         ]);
-        setSubscribedCreatorIds(ids);
+        setSubscribedCreatorIds(subIds || []);
         setAllVideos(vids);
       } catch (e) {
-        console.error('B2 Mesh Sync failed: Falling back to cached state.');
+        console.error('Turso Subscriptions Sync failed.');
       } finally {
         setIsLoading(false);
       }
@@ -50,15 +38,9 @@ export default function SubscriptionsPage() {
     syncMesh();
   }, [user]);
 
-  // Algorithmic filtering for the subscriptions feed
   const subscribedVideos = useMemo(() => {
     if (subscribedCreatorIds.length === 0) return [];
-    
-    // Filter all videos where the uploader is in the user's subscription list
-    return allVideos.filter(v => 
-      subscribedCreatorIds.includes(v.uploaderId) || 
-      subscribedCreatorIds.includes(v.id) // Fallback for legacy mock ID formats
-    );
+    return allVideos.filter(v => subscribedCreatorIds.includes(v.uploaderId));
   }, [subscribedCreatorIds, allVideos]);
 
   return (
@@ -76,7 +58,7 @@ export default function SubscriptionsPage() {
             </div>
             {subscribedCreatorIds.length > 0 && (
               <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-[10px] text-accent font-code">
-                <DatabaseZap size={12} /> B2 PERSISTENCE ACTIVE
+                <DatabaseZap size={12} /> TURSO SQL PERSISTENCE ACTIVE
               </div>
             )}
           </div>
@@ -87,7 +69,7 @@ export default function SubscriptionsPage() {
                 <BellRing size={40} className="text-accent/40" />
               </div>
               <h3 className="text-xl font-headline font-bold text-white mb-2">Don't miss a beat</h3>
-              <p className="max-w-xs mb-8">Sign in to see updates from your favorite creators stored on the B2 mesh.</p>
+              <p className="max-w-xs mb-8">Sign in to see updates from your favorite creators stored on the SQL mesh.</p>
               <Link href="/auth">
                 <button className="px-8 py-3 rounded-xl bg-accent text-background font-headline font-bold hover:neon-glow transition-all">
                   SIGN IN
@@ -97,14 +79,14 @@ export default function SubscriptionsPage() {
           ) : isLoading || isUserLoading ? (
             <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
               <Loader2 className="animate-spin text-accent" size={40} />
-              <p className="font-code text-xs tracking-widest text-accent uppercase">Resolving B2 Social Nodes...</p>
+              <p className="font-code text-xs tracking-widest text-accent uppercase">Resolving SQL Mesh Nodes...</p>
             </div>
           ) : subscribedCreatorIds.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-[60vh] text-muted-foreground text-center animate-in fade-in duration-500">
               <Users size={64} className="mb-6 opacity-20" />
               <h3 className="text-xl font-headline font-bold text-white mb-2">Your mesh is empty</h3>
-              <p className="max-w-xs mb-8">Follow creators to see their latest transmissions here. Manifests are backed up to Backblaze.</p>
-              <Link href="/trending">
+              <p className="max-w-xs mb-8">Follow creators to see their latest transmissions here. Manifests are backed up to Turso SQL.</p>
+              <Link href="/">
                 <button className="px-8 py-3 rounded-xl border border-accent text-accent font-headline font-bold hover:bg-accent/10 transition-all">
                   DISCOVER CREATORS
                 </button>
@@ -118,7 +100,7 @@ export default function SubscriptionsPage() {
                 ))
               ) : (
                 <div className="col-span-full p-12 glass-panel rounded-3xl text-center border-dashed border-white/5 opacity-50">
-                  <p className="text-muted-foreground font-body">No recent transmissions from your B2-linked creators.</p>
+                  <p className="text-muted-foreground font-body">No recent transmissions from your SQL-linked creators.</p>
                 </div>
               )}
             </div>

@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -7,15 +6,9 @@ import Sidebar from '@/components/layout/Sidebar';
 import VideoCard from '@/components/video-card/VideoCard';
 import { useUser } from '@/firebase';
 import { Layout, Clock, Heart, Loader2, ChevronRight, DatabaseZap } from 'lucide-react';
-import { getB2History, getB2LikedVideos, getB2Videos } from '@/app/actions/b2-store';
+import { getTursoVideos, getTursoUserSocialData } from '@/app/actions/turso-actions';
 import Link from 'next/link';
 
-/**
- * LibraryPage
- * 
- * Consolidates user-specific metadata from the B2 Social Mesh.
- * Shows recent history and liked transmissions in a unified view.
- */
 export default function LibraryPage() {
   const { user, isUserLoading } = useUser();
   const [historyIds, setHistoryIds] = useState<string[]>([]);
@@ -31,16 +24,15 @@ export default function LibraryPage() {
       }
       setIsLoading(true);
       try {
-        const [hIds, lIds, vids] = await Promise.all([
-          getB2History(user.uid),
-          getB2LikedVideos(user.uid),
-          getB2Videos()
+        const [socialData, vids] = await Promise.all([
+          getTursoUserSocialData(user.uid),
+          getTursoVideos()
         ]);
-        setHistoryIds(hIds);
-        setLikedIds(lIds);
+        setHistoryIds(socialData.historyVideoIds);
+        setLikedIds(socialData.likedVideoIds);
         setAllVideos(vids);
       } catch (e) {
-        console.error('B2 Mesh Sync failed for Library.');
+        console.error('Turso Mesh Sync failed for Library.');
       } finally {
         setIsLoading(false);
       }
@@ -71,7 +63,7 @@ export default function LibraryPage() {
             </div>
             {user && (
               <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-[10px] text-accent font-code">
-                <DatabaseZap size={12} /> B2 MESH PERSISTENCE
+                <DatabaseZap size={12} /> TURSO SQL MESH ACTIVE
               </div>
             )}
           </div>
@@ -82,7 +74,7 @@ export default function LibraryPage() {
                 <Layout size={40} className="text-white/20" />
               </div>
               <h3 className="text-xl font-headline font-bold text-white mb-2">Build your collection</h3>
-              <p className="max-w-xs mb-8">Sign in to track your history and liked transmissions on the B2 mesh.</p>
+              <p className="max-w-xs mb-8">Sign in to track your history and liked transmissions on the SQL mesh.</p>
               <Link href="/auth">
                 <button className="px-8 py-3 rounded-xl bg-accent text-background font-headline font-bold hover:neon-glow transition-all">
                   SIGN IN
@@ -102,7 +94,6 @@ export default function LibraryPage() {
             </div>
           ) : (
             <div className="space-y-12 mb-12 animate-in slide-in-from-bottom-4 duration-500">
-              {/* History Section */}
               <section>
                 <div className="flex items-center justify-between mb-6">
                   <Link href="/history" className="flex items-center gap-2 group">
@@ -120,12 +111,11 @@ export default function LibraryPage() {
                   </div>
                 ) : (
                   <div className="p-12 glass-panel rounded-3xl text-center border-dashed border-white/5 opacity-50">
-                    <p className="text-sm text-muted-foreground font-body">No recent transmissions on the B2 mesh.</p>
+                    <p className="text-sm text-muted-foreground font-body">No recent transmissions on the SQL mesh.</p>
                   </div>
                 )}
               </section>
 
-              {/* Liked Section */}
               <section>
                 <div className="flex items-center justify-between mb-6">
                   <Link href="/liked" className="flex items-center gap-2 group">
