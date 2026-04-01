@@ -1,14 +1,8 @@
-
 import { NextResponse } from 'next/server';
 import { turso } from '@/lib/turso';
 
 /**
  * Toggles a Like in the Turso Mesh
- * Logic: 
- * 1. Parse video_id as integer.
- * 2. If liked -> DELETE from likes, decrement likesCount.
- * 3. If not liked -> DELETE from dislikes (mutual exclusion), decrement dislikesCount if removed, 
- *    INSERT into likes, increment likesCount.
  */
 export async function POST(request: Request) {
   try {
@@ -78,13 +72,13 @@ export async function GET(request: Request) {
 
   try {
     if (videoId) {
+      const vidInt = parseInt(videoId, 10);
       const result = await turso.execute({
         sql: "SELECT 1 FROM likes WHERE user_id = ? AND video_id = ?",
-        args: [userId, parseInt(videoId, 10)]
+        args: [userId, vidInt]
       });
       return NextResponse.json({ active: result.rows.length > 0 });
     } else {
-      // Return list for registry pages
       const result = await turso.execute({
         sql: "SELECT video_id FROM likes WHERE user_id = ?",
         args: [userId]

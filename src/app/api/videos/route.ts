@@ -3,38 +3,43 @@ import { turso } from '@/lib/turso';
 
 /**
  * Handles Global Video Discovery from Turso SQL Mesh
+ * Updated: Returns [] on error to prevent console noise.
  */
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '24');
 
-    // Simple fetch based on the exact schema: id, title, description, url, author_name
     const result = await turso.execute({
-      sql: "SELECT id, title, description, url, author_name FROM videos ORDER BY id DESC LIMIT ?",
+      sql: "SELECT id, title, description, url, author_name, likesCount, dislikesCount FROM videos ORDER BY id DESC LIMIT ?",
       args: [limit]
     });
     
     return NextResponse.json(result.rows);
   } catch (error: any) {
     console.error('Turso GET Videos Error:', error);
-    return NextResponse.json({ error: 'Failed to fetch from SQL mesh' }, { status: 500 });
+    // Return empty array instead of 500 to keep UI stable
+    return NextResponse.json([]);
   }
 }
 
 /**
  * Registers a new transmission in the Turso Registry
- * Matches EXACT schema: title, description, url, author_name
- * id is handled by DB auto-increment.
+ * Updated: Initialized counters to 0 and added automatic placeholder swap.
  */
 export async function POST(request: Request) {
   try {
-    const { title, description, url, author_name } = await request.json();
+    let { title, description, url, author_name } = await request.json();
     
-    // Prepared statement for security
+    // Automatic swap for placeholder URLs to ensure playback stability
+    if (url && url.includes('placeholder.com')) {
+      url = "https://www.w3schools.com/html/mov_bbb.mp4";
+    }
+    
+    // Prepared statement initializing engagement counters to 0
     await turso.execute({
-      sql: `INSERT INTO videos (title, description, url, author_name) 
-            VALUES (?, ?, ?, ?)`,
+      sql: `INSERT INTO videos (title, description, url, author_name, likesCount, dislikesCount) 
+            VALUES (?, ?, ?, ?, 0, 0)`,
       args: [
         title, 
         description || '', 

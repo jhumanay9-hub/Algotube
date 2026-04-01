@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef } from 'react';
@@ -22,7 +21,7 @@ interface UploadModalProps {
 /**
  * UploadModal - Refactored for EXACT Turso SQL Schema
  * Uses title, description, url, author_name.
- * Placeholder URL is a CORS-compliant test stream.
+ * Sends a placeholder URL that the backend automatically swaps for stability.
  */
 export function UploadModal({ isOpen, onClose }: UploadModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -67,11 +66,11 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
       }
 
       // Exact key mapping for Turso: title, description, url, author_name
-      // CORS compliant test stream
+      // Sending placeholder.com to trigger backend URL resolution
       const videoData = {
         title: capturedTitle,
         description: capturedDescription,
-        url: "https://www.w3schools.com/html/mov_bbb.mp4", 
+        url: "https://placeholder.com/video.mp4", 
         author_name: authorName
       };
 
