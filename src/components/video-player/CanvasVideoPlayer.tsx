@@ -1,7 +1,7 @@
-
 "use client";
 
 import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
+import { Loader2 } from 'lucide-react';
 
 interface CanvasVideoPlayerProps {
   src: string | null;
@@ -11,21 +11,18 @@ interface CanvasVideoPlayerProps {
 
 /**
  * CanvasVideoPlayer - Standard HTML5 Implementation
- * Uses the <source> tag with explicit MIME types for pre-loader stability.
- * Features a Local Test URL for hardware diagnostic purposes.
+ * Refactored to remove all Canvas logic and provide a robust loading guard.
+ * Features strict CORS handling and source validation.
  */
-const STABLE_FALLBACK_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
-
 const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, externalState }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   
-  // Local test toggle (Switch this to TRUE to debug environment playback)
-  const USE_TEST_URL = false;
-  const videoUrl = USE_TEST_URL ? STABLE_FALLBACK_URL : (src || "");
+  // Guard against 'undefined' string or null/empty sources
+  const isValidSrc = src && src !== "undefined" && src.trim() !== "";
 
   // Sync with external state (Watch Party / SQL Mesh Sync)
   useEffect(() => {
-    if (!videoRef.current || !externalState) return;
+    if (!videoRef.current || !externalState || !isValidSrc) return;
     
     const targetTime = externalState.currentTime;
     
@@ -39,10 +36,10 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
       videoRef.current.pause();
     } else if (!externalState.isPaused && videoRef.current.paused) {
       videoRef.current.play().catch(() => {
-        // Autoplay may be blocked if not muted
+        // Autoplay may be blocked by browser policy
       });
     }
-  }, [externalState]);
+  }, [externalState, isValidSrc]);
 
   // Expose playback state to parent (ConversationPanel/WatchParty)
   useImperativeHandle(ref, () => ({
@@ -50,34 +47,33 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
     getIsPaused: () => videoRef.current?.paused || false
   }));
 
+  if (!isValidSrc) {
+    return (
+      <div className="relative aspect-video bg-black/40 backdrop-blur-sm rounded-3xl flex flex-col items-center justify-center gap-4 border border-white/5 overflow-hidden shadow-2xl">
+        <Loader2 className="animate-spin text-accent" size={32} />
+        <div className="text-[10px] font-code text-accent uppercase tracking-widest animate-pulse">
+          Resolving SQL Transmission...
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="relative aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/5">
+    <div className="relative aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/5 group">
       <video
         ref={videoRef}
-        className="w-full h-full rounded-lg shadow-xl"
+        className="w-full h-full rounded-lg"
         controls
         autoPlay
         playsInline
-        preload="auto"
+        preload="metadata"
         crossOrigin="anonymous" // Essential for cross-origin media handshake
         onError={(e) => {
-          // Log specific browser error code (1-4) for SQL Mesh diagnostics
-          console.error('Mesh Sync Failed:', e.currentTarget.error?.message, `(Code: ${e.currentTarget.error?.code})`);
+          console.error('SQL Sync Failed:', e.currentTarget.error?.message, `(Code: ${e.currentTarget.error?.code})`);
         }}
       >
-        {videoUrl && (
-          <source src={videoUrl} type="video/mp4" />
-        )}
+        <source src={src} type="video/mp4" />
       </video>
-      
-      {/* Loading Overlay if Source is Missing */}
-      {!videoUrl && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-none">
-          <div className="text-[10px] font-code text-accent uppercase tracking-widest animate-pulse">
-            Awaiting Registry Data...
-          </div>
-        </div>
-      )}
     </div>
   );
 });

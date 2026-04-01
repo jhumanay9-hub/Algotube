@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
@@ -19,8 +18,7 @@ const STABLE_FALLBACK_URL = "https://commondatastorage.googleapis.com/gtv-videos
 
 /**
  * VideoDetailPage - SQL Engagement Mesh
- * Handles real-time hydration of Like/Dislike/Favorite states from Turso.
- * Implements optimistic mutual exclusion for engagement buttons.
+ * Refactored to verify and sanitize metadata strings from the Turso registry.
  */
 export default function VideoDetailPage() {
   const { id } = useParams();
@@ -47,7 +45,7 @@ export default function VideoDetailPage() {
       
       // Parallel fetch for video metadata and user engagement status
       const [vRes, lRes, dRes, fRes] = await Promise.all([
-        fetch(`/api/videos?limit=10`),
+        fetch(`/api/videos?limit=50`),
         user ? fetch(`/api/likes?userId=${user.uid}&videoId=${vidStr}`).then(r => r.json()) : Promise.resolve({ active: false }),
         user ? fetch(`/api/dislikes?userId=${user.uid}&videoId=${vidStr}`).then(r => r.json()) : Promise.resolve({ active: false }),
         user ? fetch(`/api/favorites?userId=${user.uid}&videoId=${vidStr}`).then(r => r.json()) : Promise.resolve({ active: false })
@@ -57,23 +55,24 @@ export default function VideoDetailPage() {
       const vids = Array.isArray(vData) ? vData : [];
       let found = vids.find((v: any) => v.id?.toString() === vidStr);
       
-      // Sanitization guard for frontend stability
+      // CRITICAL: Diagnostic log for SQL mesh verification
+      console.log('SQL Mesh Data:', found);
+
+      // Sanitization guard for playback stability
       if (found) {
-        // Trim whitespace and validate URL
         let videoUrl = (found.url || "").trim();
         
-        if (!videoUrl || videoUrl.includes('placeholder.com') || videoUrl.includes('undefined')) {
+        // Resolve placeholders or broken strings to stable Google stream
+        if (!videoUrl || videoUrl.includes('placeholder.com') || videoUrl === 'undefined') {
           videoUrl = STABLE_FALLBACK_URL;
         }
         
         found.url = videoUrl;
-        console.log("Mesh Sync: Passing sanitized video URL:", found.url);
       }
 
-      setVideo(found || vids[0] || null);
+      setVideo(found || null);
       setRecommendations(vids.filter((v: any) => v.id?.toString() !== vidStr).slice(0, 3));
       
-      // Hydrate interaction states from the SQL mesh
       if (user) {
         setIsLiked(lRes.active === true);
         setIsDisliked(dRes.active === true);
@@ -102,30 +101,24 @@ export default function VideoDetailPage() {
     return () => clearInterval(timer);
   }, []);
 
-  /**
-   * handleInteraction - Optimistic SQL Sync
-   * Implements mutual exclusion: Liking a video automatically un-dislikes it.
-   */
   const handleInteraction = async (type: 'likes' | 'dislikes' | 'favorites') => {
     if (!user) {
       toast({ title: "Auth Required", description: "Sign in to interact with the mesh." });
       return;
     }
 
-    // Capture previous states for rollback
     const prevLiked = isLiked;
     const prevDisliked = isDisliked;
     const prevFavorited = isFavorited;
 
-    // Optimistic UI updates
     if (type === 'likes') {
       const nextLiked = !isLiked;
       setIsLiked(nextLiked);
-      if (nextLiked) setIsDisliked(false); // Mutually exclusive
+      if (nextLiked) setIsDisliked(false);
     } else if (type === 'dislikes') {
       const nextDisliked = !isDisliked;
       setIsDisliked(nextDisliked);
-      if (nextDisliked) setIsLiked(false); // Mutually exclusive
+      if (nextDisliked) setIsLiked(false);
     } else if (type === 'favorites') {
       setIsFavorited(!isFavorited);
     }
@@ -137,21 +130,18 @@ export default function VideoDetailPage() {
         body: JSON.stringify({ userId: user.uid, videoId: id })
       });
       
-      if (!res.ok) throw new Error('Interaction rejected by mesh');
+      if (!res.ok) throw new Error('Interaction rejected');
       
       const data = await res.json();
-      
-      // Final sync with actual database response
       if (type === 'likes') setIsLiked(data.active);
       if (type === 'dislikes') setIsDisliked(data.active);
       if (type === 'favorites') setIsFavorited(data.active);
 
     } catch (e) {
-      // Rollback on failure
       setIsLiked(prevLiked);
       setIsDisliked(prevDisliked);
       setIsFavorited(prevFavorited);
-      toast({ variant: "destructive", title: "Action Failed", description: "SQL registry rejected the transmission." });
+      toast({ variant: "destructive", title: "Action Failed", description: "Registry synchronization failure." });
     }
   };
 
@@ -159,7 +149,7 @@ export default function VideoDetailPage() {
     return (
       <div className="flex flex-col h-screen items-center justify-center gap-4 bg-background">
         <Loader2 className="animate-spin text-accent" size={48} />
-        <p className="font-code text-sm tracking-widest text-accent uppercase">Resolving SQL Mesh...</p>
+        <p className="font-code text-sm tracking-widest text-accent uppercase">Querying Registry...</p>
       </div>
     );
   }
