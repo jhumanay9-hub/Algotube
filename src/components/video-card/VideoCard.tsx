@@ -1,7 +1,8 @@
+
 "use client";
 
 import React from 'react';
-import { Play, MoreVertical, Eye, Clock } from 'lucide-react';
+import { Play, MoreVertical, ThumbsUp, ThumbsDown } from 'lucide-react';
 import Link from 'next/link';
 
 interface VideoCardProps {
@@ -11,15 +12,16 @@ interface VideoCardProps {
     description?: string;
     url: string;
     author_name: string;
+    likesCount?: number;
+    dislikesCount?: number;
   };
 }
 
 /**
- * VideoCard - Optimized for 4GB RAM
- * Uses the new SQL Schema keys: url, author_name.
+ * VideoCard - Optimized SQL Transmission Preview
+ * Uses the synchronized SQL Schema keys and displays engagement counters.
  */
 export default function VideoCard({ video }: VideoCardProps) {
-  // Use a reliable placeholder for thumbnails since they are removed from the schema
   const thumbnail = `https://picsum.photos/seed/${video.id}/600/400`;
 
   return (
@@ -48,7 +50,7 @@ export default function VideoCard({ video }: VideoCardProps) {
                 {video.title}
               </h3>
             </Link>
-            <p className="text-[10px] text-muted-foreground mt-1 truncate">
+            <p className="text-[10px] text-muted-foreground mt-1 truncate font-body">
               {video.author_name}
             </p>
           </div>
@@ -57,13 +59,14 @@ export default function VideoCard({ video }: VideoCardProps) {
           </button>
         </div>
 
-        <div className="mt-auto flex items-center gap-3 text-[9px] text-muted-foreground font-code uppercase tracking-tighter">
-          <span className="flex items-center gap-1">
-            <Eye size={10} /> 0 MESH VIEWS
+        <div className="mt-auto flex items-center gap-4 text-[9px] text-muted-foreground font-code uppercase tracking-tighter">
+          <span className="flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded border border-white/5">
+            <ThumbsUp size={10} className="text-accent" /> {video.likesCount || 0}
           </span>
-          <span className="flex items-center gap-1">
-            <Clock size={10} /> RECENT SYNC
+          <span className="flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded border border-white/5">
+            <ThumbsDown size={10} className="text-red-500" /> {video.dislikesCount || 0}
           </span>
+          <span className="ml-auto opacity-50">SYNCED</span>
         </div>
       </div>
     </div>

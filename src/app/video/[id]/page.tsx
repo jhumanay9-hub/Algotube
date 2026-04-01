@@ -15,6 +15,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
+/**
+ * VideoDetailPage - SQL Engagement Mesh
+ * Handles real-time hydration of Like/Dislike/Favorite states from Turso.
+ * Implements optimistic mutual exclusion for engagement buttons.
+ */
 export default function VideoDetailPage() {
   const { id } = useParams();
   const { user } = useUser();
@@ -28,6 +33,7 @@ export default function VideoDetailPage() {
   const [externalSyncState, setExternalSyncState] = useState<any>(null);
   const [localPlayerState, setLocalPlayerState] = useState({ currentTime: 0, isPaused: true });
   
+  // Engagement States
   const [isLiked, setIsLiked] = useState(false);
   const [isDisliked, setIsDisliked] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
@@ -36,6 +42,8 @@ export default function VideoDetailPage() {
     setIsLoading(true);
     try {
       const vidStr = id?.toString();
+      
+      // Parallel fetch for video metadata and user engagement status
       const [vRes, lRes, dRes, fRes] = await Promise.all([
         fetch(`/api/videos?limit=10`),
         user ? fetch(`/api/likes?userId=${user.uid}&videoId=${vidStr}`).then(r => r.json()) : Promise.resolve({ active: false }),
@@ -50,6 +58,7 @@ export default function VideoDetailPage() {
       setVideo(found || vids[0] || null);
       setRecommendations(vids.filter((v: any) => v.id?.toString() !== vidStr).slice(0, 3));
       
+      // Hydrate interaction states from the SQL mesh
       if (user) {
         setIsLiked(lRes.active === true);
         setIsDisliked(dRes.active === true);
@@ -78,30 +87,33 @@ export default function VideoDetailPage() {
     return () => clearInterval(timer);
   }, []);
 
+  /**
+   * handleInteraction - Optimistic SQL Sync
+   * Implements mutual exclusion: Liking a video automatically un-dislikes it.
+   */
   const handleInteraction = async (type: 'likes' | 'dislikes' | 'favorites') => {
     if (!user) {
-      toast({ title: "Auth Required", description: "Sign in to interact with mesh." });
+      toast({ title: "Auth Required", description: "Sign in to interact with the mesh." });
       return;
     }
 
-    let previousState: boolean;
-    let setter: (val: boolean) => void;
+    // Capture previous states for rollback
+    const prevLiked = isLiked;
+    const prevDisliked = isDisliked;
+    const prevFavorited = isFavorited;
 
+    // Optimistic UI updates
     if (type === 'likes') {
-      previousState = isLiked;
-      setter = setIsLiked;
-      // Optimistically handle mutual exclusion for likes/dislikes
-      if (!previousState) setIsDisliked(false);
+      const nextLiked = !isLiked;
+      setIsLiked(nextLiked);
+      if (nextLiked) setIsDisliked(false); // Mutually exclusive
     } else if (type === 'dislikes') {
-      previousState = isDisliked;
-      setter = setIsDisliked;
-      if (!previousState) setIsLiked(false);
-    } else {
-      previousState = isFavorited;
-      setter = setIsFavorited;
+      const nextDisliked = !isDisliked;
+      setIsDisliked(nextDisliked);
+      if (nextDisliked) setIsLiked(false); // Mutually exclusive
+    } else if (type === 'favorites') {
+      setIsFavorited(!isFavorited);
     }
-
-    setter(!previousState);
 
     try {
       const res = await fetch(`/api/${type}`, {
@@ -109,12 +121,22 @@ export default function VideoDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.uid, videoId: id })
       });
-      if (!res.ok) throw new Error('Interaction failed');
+      
+      if (!res.ok) throw new Error('Interaction rejected by mesh');
+      
       const data = await res.json();
-      setter(data.active);
+      
+      // Final sync with actual database response
+      if (type === 'likes') setIsLiked(data.active);
+      if (type === 'dislikes') setIsDisliked(data.active);
+      if (type === 'favorites') setIsFavorited(data.active);
+
     } catch (e) {
-      setter(previousState);
-      toast({ variant: "destructive", title: "Action Failed", description: "SQL registry rejected interaction." });
+      // Rollback on failure
+      setIsLiked(prevLiked);
+      setIsDisliked(prevDisliked);
+      setIsFavorited(prevFavorited);
+      toast({ variant: "destructive", title: "Action Failed", description: "SQL registry rejected the transmission." });
     }
   };
 
@@ -176,7 +198,10 @@ export default function VideoDetailPage() {
                     <Button 
                       variant="ghost" 
                       onClick={() => handleInteraction('likes')} 
-                      className={cn("rounded-2xl gap-2 h-10 px-4", isLiked ? "text-accent bg-accent/10 border border-accent/30" : "bg-white/5 border border-white/10")}
+                      className={cn(
+                        "rounded-2xl gap-2 h-10 px-4 transition-all duration-300", 
+                        isLiked ? "text-accent bg-accent/10 border border-accent/30 shadow-[0_0_10px_rgba(116,222,236,0.2)]" : "bg-white/5 border border-white/10 hover:bg-white/10"
+                      )}
                     >
                       <ThumbsUp size={16} className={isLiked ? "fill-accent" : ""} /> 
                       <span className="text-[10px] font-bold">{video?.likesCount || 0}</span>
@@ -184,14 +209,21 @@ export default function VideoDetailPage() {
                     <Button 
                       variant="ghost" 
                       onClick={() => handleInteraction('dislikes')} 
-                      className={cn("rounded-2xl h-10 px-4", isDisliked ? "text-red-500 bg-red-500/10 border border-red-500/30" : "bg-white/5 border border-white/10")}
+                      className={cn(
+                        "rounded-2xl gap-2 h-10 px-4 transition-all duration-300", 
+                        isDisliked ? "text-red-500 bg-red-500/10 border border-red-500/30 shadow-[0_0_10px_rgba(239,68,68,0.2)]" : "bg-white/5 border border-white/10 hover:bg-white/10"
+                      )}
                     >
                       <ThumbsDown size={16} className={isDisliked ? "fill-red-500" : ""} /> 
+                      <span className="text-[10px] font-bold">{video?.dislikesCount || 0}</span>
                     </Button>
                     <Button 
                       variant="ghost" 
                       onClick={() => handleInteraction('favorites')} 
-                      className={cn("rounded-2xl h-10 px-4", isFavorited ? "text-yellow-500 bg-yellow-500/10 border border-yellow-500/30" : "bg-white/5 border border-white/10")}
+                      className={cn(
+                        "rounded-2xl h-10 px-4 transition-all duration-300", 
+                        isFavorited ? "text-yellow-500 bg-yellow-500/10 border border-yellow-500/30 shadow-[0_0_10px_rgba(234,179,8,0.2)]" : "bg-white/5 border border-white/10 hover:bg-white/10"
+                      )}
                     >
                       <Star size={16} className={isFavorited ? "fill-yellow-500" : ""} /> 
                     </Button>
