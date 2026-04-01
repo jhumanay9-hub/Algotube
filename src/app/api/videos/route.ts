@@ -25,15 +25,16 @@ export async function GET(request: Request) {
 
 /**
  * Registers a new transmission in the Turso Registry
- * Updated: Initialized counters to 0 and added automatic placeholder swap.
+ * Updated: Initialized counters to 0 and added automatic placeholder swap with stable Google-hosted URL.
  */
 export async function POST(request: Request) {
   try {
     let { title, description, url, author_name } = await request.json();
     
     // Automatic swap for placeholder URLs to ensure playback stability
+    // Using Google-hosted BigBuckBunny for superior CORS compatibility
     if (url && url.includes('placeholder.com')) {
-      url = "https://www.w3schools.com/html/mov_bbb.mp4";
+      url = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
     }
     
     // Prepared statement initializing engagement counters to 0

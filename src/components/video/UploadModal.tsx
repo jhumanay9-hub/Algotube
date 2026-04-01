@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -107,7 +107,9 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
             <Upload className="text-accent" />
             New Transmission
           </DialogTitle>
-          <p className="text-muted-foreground text-[10px] font-code uppercase tracking-widest mt-1">Turso SQL Registry Mode</p>
+          <DialogDescription className="text-muted-foreground text-[10px] font-code uppercase tracking-widest mt-1">
+            Broadcast your high-performance metadata to the Turso SQL Registry.
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleUpload} className="p-8 pt-0 space-y-6">

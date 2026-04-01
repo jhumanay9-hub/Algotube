@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useRef, useEffect, useState } from 'react';
@@ -79,6 +78,7 @@ export default function ShortsPlayer({ video }: ShortsPlayerProps) {
           playsInline
           muted={isMuted}
           onClick={togglePlay}
+          crossOrigin="anonymous"
         />
 
         {!isPlaying && (
