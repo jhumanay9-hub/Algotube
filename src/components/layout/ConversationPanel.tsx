@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, MessageSquare, Loader2, Users, DatabaseZap, Zap, Info, Clock, Play, Pause } from 'lucide-react';
+import { Send, Loader2, Users, DatabaseZap, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
@@ -33,7 +33,12 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
   const scrollRef = useRef<HTMLDivElement>(null);
   const publicScrollRef = useRef<HTMLDivElement>(null);
 
-  // --- PUBLIC TAB LOGIC ---
+  const scrollToBottom = (ref: React.RefObject<HTMLDivElement>) => {
+    if (ref.current) {
+      ref.current.scrollTop = ref.current.scrollHeight;
+    }
+  };
+
   const loadPublicMessages = useCallback(async () => {
     try {
       const res = await fetch(`/api/messages?videoId=${videoId}`);
@@ -44,7 +49,6 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
     }
   }, [videoId]);
 
-  // --- WATCH PARTY LOGIC ---
   const loadRooms = useCallback(async () => {
     try {
       const res = await fetch(`/api/chat/rooms?videoId=${videoId}`);
@@ -52,7 +56,6 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
       const availableRooms = Array.isArray(data) ? data : [];
       setRooms(availableRooms);
       
-      // Auto-join first room or create one if user is leader/first
       if (!currentRoom && availableRooms.length > 0) {
         setCurrentRoom(availableRooms[0]);
       }
@@ -63,7 +66,6 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
     }
   }, [videoId, currentRoom]);
 
-  // Sync / Polling Algorithm
   useEffect(() => {
     loadPublicMessages();
     loadRooms();
@@ -71,14 +73,10 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
     const interval = setInterval(() => {
       loadPublicMessages();
       if (currentRoom) {
-        // Poll messages and members
         fetch(`/api/chat/messages?roomId=${currentRoom.id}`).then(r => r.json()).then(msgs => {
           if (Array.isArray(msgs)) {
             setMessages(msgs);
-            // Tail-recursion logic: scroll to bottom if new messages
-            if (scrollRef.current) {
-              scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-            }
+            scrollToBottom(scrollRef);
           }
         });
         
@@ -86,17 +84,14 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
           if (Array.isArray(mems)) setMembers(mems);
         });
 
-        // Watch Party Sync Logic (2s polling)
         if (activeTab === 'private' && user) {
           fetch(`/api/watch-party?roomId=${currentRoom.id}`).then(r => r.json()).then(syncData => {
             if (syncData && syncData.leaderId !== user.uid && onSyncState) {
-              // Sync to leader
               onSyncState({ 
                 currentTime: syncData.currentTime, 
                 isPaused: syncData.isPaused === 1 || syncData.isPaused === true 
               });
             } else if ((!syncData || syncData.leaderId === user.uid) && playerState) {
-              // Broadcast as leader (or if no leader exists, become leader)
               fetch('/api/watch-party', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -111,10 +106,14 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
           });
         }
       }
-    }, 2000); // 2s Mesh Sync Cycle
+    }, 2000); 
 
     return () => clearInterval(interval);
   }, [videoId, currentRoom, user, activeTab, playerState, onSyncState, loadPublicMessages, loadRooms]);
+
+  useEffect(() => {
+    scrollToBottom(activeTab === 'public' ? publicScrollRef : scrollRef);
+  }, [publicMessages, messages, activeTab]);
 
   const handlePostMessage = async (isPublic: boolean) => {
     if (!user || !newComment.trim()) return;
@@ -158,9 +157,9 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
           </TabsList>
         </div>
 
-        <TabsContent value="public" className="flex-1 flex flex-col m-0 outline-none">
+        <TabsContent value="public" className="flex-1 flex flex-col m-0 outline-none overflow-hidden">
           <div ref={publicScrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-black/20">
-            {publicMessages.map((m, idx) => (
+            {publicMessages.length > 0 ? publicMessages.map((m, idx) => (
               <div key={idx} className="flex gap-3 animate-in slide-in-from-bottom-2 duration-300">
                 <Avatar className="h-7 w-7 rounded-lg">
                   <AvatarImage src={m.userAvatar} />
@@ -174,12 +173,16 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
                   <p className="text-xs text-foreground/80 leading-relaxed font-body">{m.content}</p>
                 </div>
               </div>
-            ))}
+            )) : (
+              <div className="flex flex-col items-center justify-center h-full opacity-20 text-center">
+                <p className="text-[10px] uppercase font-code">No transmissions detected</p>
+              </div>
+            )}
           </div>
           <MessageInput onSend={() => handlePostMessage(true)} value={newComment} onChange={setNewComment} disabled={isSubmitting} user={user} />
         </TabsContent>
 
-        <TabsContent value="private" className="flex-1 flex flex-col m-0 outline-none">
+        <TabsContent value="private" className="flex-1 flex flex-col m-0 outline-none overflow-hidden">
           {currentRoom ? (
             <>
               <div className="px-4 py-2 border-b border-white/5 bg-accent/5 flex items-center justify-between">
@@ -188,21 +191,21 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
                   <span className="text-[9px] font-code text-accent uppercase font-bold">{currentRoom.name} SYNC</span>
                 </div>
                 <div className="flex -space-x-1.5">
-                  {members.slice(0, 3).map((m, i) => (
+                  {members.slice(0, 4).map((m, i) => (
                     <Avatar key={i} className="h-5 w-5 border border-background">
                       <AvatarImage src={m.userAvatar} />
                       <AvatarFallback className="text-[6px]">{m.userName?.[0]}</AvatarFallback>
                     </Avatar>
                   ))}
-                  {members.length > 3 && (
+                  {members.length > 4 && (
                     <div className="w-5 h-5 rounded-full bg-accent/20 border border-background flex items-center justify-center text-[6px] font-bold text-accent">
-                      +{members.length - 3}
+                      +{members.length - 4}
                     </div>
                   )}
                 </div>
               </div>
               <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-black/20">
-                {messages.map((m, idx) => (
+                {messages.length > 0 ? messages.map((m, idx) => (
                   <div key={idx} className={cn("flex gap-3", m.userId === user?.uid ? "flex-row-reverse" : "flex-row")}>
                     <Avatar className="h-6 w-6 rounded-md">
                       <AvatarImage src={m.userAvatar} />
@@ -215,21 +218,25 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
                       <p>{m.content}</p>
                     </div>
                   </div>
-                ))}
+                )) : (
+                  <div className="flex flex-col items-center justify-center h-full opacity-20 text-center">
+                    <p className="text-[10px] uppercase font-code">Room is empty</p>
+                  </div>
+                )}
               </div>
               <MessageInput onSend={() => handlePostMessage(false)} value={newComment} onChange={setNewComment} disabled={isSubmitting} user={user} />
             </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center opacity-30 gap-4">
               <Users size={48} />
-              <p className="text-[10px] font-headline font-bold uppercase tracking-widest">No watch parties initiated on this node.</p>
+              <p className="text-[10px] font-headline font-bold uppercase tracking-widest">No watch parties initiated</p>
               {user && (
                 <Button 
                   onClick={() => {
                     fetch('/api/chat/rooms', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ videoId, name: 'Lobby 1', creatorId: user.uid })
+                      body: JSON.stringify({ videoId, name: 'Main Lobby', creatorId: user.uid })
                     }).then(() => loadRooms());
                   }}
                   className="bg-accent text-background font-bold text-[10px] px-6 rounded-full"
@@ -244,7 +251,7 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
 
       <div className="p-2 flex items-center justify-center gap-2 border-t border-white/5 bg-black/40">
         <DatabaseZap size={10} className="text-accent/40" />
-        <span className="text-[8px] font-code text-accent/40 uppercase tracking-widest">Turso SQL Polling Operational</span>
+        <span className="text-[8px] font-code text-accent/40 uppercase tracking-widest">SQL Mesh Polling Active</span>
       </div>
     </div>
   );
@@ -257,7 +264,7 @@ function MessageInput({ onSend, value, onChange, disabled, user }: any) {
     <div className="p-4 bg-white/5 border-t border-white/10 relative">
       <Input 
         className="pr-12 bg-black/40 border-white/5 focus:border-accent/40 rounded-xl text-xs h-10"
-        placeholder="Type to the mesh..."
+        placeholder="Broadcast to mesh..."
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && onSend()}
@@ -270,7 +277,7 @@ function MessageInput({ onSend, value, onChange, disabled, user }: any) {
         disabled={!value.trim() || disabled}
         onClick={onSend}
       >
-        {disabled ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+        {disabled ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} className="size-4" />}
       </Button>
     </div>
   );

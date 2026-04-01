@@ -9,7 +9,7 @@ import ConversationPanel from '@/components/layout/ConversationPanel';
 import CanvasVideoPlayer from '@/components/video-player/CanvasVideoPlayer';
 import VideoCard from '@/components/video-card/VideoCard';
 import { useUser } from '@/firebase';
-import { MessageCircle, ThumbsUp, Eye, Sparkles, Loader2, Users } from 'lucide-react';
+import { ThumbsUp, Eye, Sparkles, Loader2, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
@@ -27,50 +27,32 @@ export default function VideoDetailPage() {
   const [showConversation, setShowConversation] = useState(true);
   const [externalSyncState, setExternalSyncState] = useState<any>(null);
   const [localPlayerState, setLocalPlayerState] = useState({ currentTime: 0, isPaused: true });
-  
   const [isLiked, setIsLiked] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/videos?limit=10`);
-      const data = await res.json();
+      const [vRes, lRes] = await Promise.all([
+        fetch(`/api/videos?limit=10`),
+        user ? fetch(`/api/likes?userId=${user.uid}`).then(r => r.json()) : Promise.resolve([])
+      ]);
       
-      // Ensure data is an array before processing
-      const vids = Array.isArray(data) ? data : [];
-      
-      if (!Array.isArray(data) && data.error) {
-        console.error('SQL Mesh Error:', data.error);
-        throw new Error(data.error);
-      }
-      
-      // Compare ID loosely since it can be string from URL and number from SQL
+      const vData = await vRes.json();
+      const vids = Array.isArray(vData) ? vData : [];
       const found = vids.find((v: any) => v.id?.toString() === id?.toString());
       
       setVideo(found || vids[0] || null);
       setRecommendations(vids.filter((v: any) => v.id?.toString() !== id?.toString()).slice(0, 3));
       
-      if (user && found) {
-        try {
-          const likesRes = await fetch(`/api/likes?userId=${user.uid}`);
-          const likedData = await likesRes.json();
-          const likedIds = Array.isArray(likedData) ? likedData : [];
-          setIsLiked(likedIds.includes(id as string));
-        } catch (e) {
-          console.error('Likes sync failed, continuing with partial state.');
-        }
+      if (user && Array.isArray(lRes)) {
+        setIsLiked(lRes.includes(id as string));
       }
     } catch (e: any) {
       console.error('Mesh Sync Failed:', e.message || e);
-      toast({
-        variant: "destructive",
-        title: "Sync Failure",
-        description: "Could not resolve transmission from the SQL mesh."
-      });
     } finally {
       setIsLoading(false);
     }
-  }, [id, user, toast]);
+  }, [id, user]);
 
   useEffect(() => {
     loadData();
@@ -147,7 +129,6 @@ export default function VideoDetailPage() {
               <div className="relative z-10">
                 <div className="flex items-center gap-3 mb-4">
                   <span className="bg-accent/20 text-accent text-[9px] font-code px-2 py-0.5 rounded-full border border-accent/30 uppercase">SQL Sync Mesh</span>
-                  <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-code">Node ID: {video?.id}</span>
                 </div>
 
                 <h1 className="text-3xl font-headline font-bold mb-6">{video?.title}</h1>
@@ -170,10 +151,10 @@ export default function VideoDetailPage() {
                     <Button 
                       variant="ghost" 
                       onClick={() => setShowConversation(!showConversation)}
-                      className={cn("rounded-2xl gap-3 h-12 px-6 border", showConversation ? "border-accent text-accent bg-accent/5" : "bg-white/5 border border-white/10")}
+                      className={cn("rounded-2xl gap-3 h-12 px-6 border transition-all duration-300", showConversation ? "border-accent text-accent bg-accent/5" : "bg-white/5 border border-white/10")}
                     >
                       <Users size={18} /> 
-                      <span className="font-bold text-xs uppercase tracking-widest">Chat</span>
+                      <span className="font-bold text-xs uppercase tracking-widest">Join Conversation</span>
                     </Button>
                   </div>
                 </div>
