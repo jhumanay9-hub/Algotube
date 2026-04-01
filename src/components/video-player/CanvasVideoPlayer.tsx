@@ -1,28 +1,33 @@
+
 "use client";
 
 import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Loader2 } from 'lucide-react';
 
 interface CanvasVideoPlayerProps {
-  src: string | null;
+  videoUrl: string | null;
   poster?: string;
   externalState?: { currentTime: number; isPaused: boolean };
 }
 
 /**
  * CanvasVideoPlayer - Standard HTML5 Implementation
- * Refactored to remove all Canvas logic and provide a robust loading guard.
- * Features strict CORS handling and source validation.
+ * Refactored to handle SQL Mesh race conditions with strict mounting guards.
  */
-const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, externalState }, ref) => {
+const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ videoUrl, externalState }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   
-  // Guard against 'undefined' string or null/empty sources
-  const isValidSrc = src && src !== "undefined" && src.trim() !== "";
+  // Guard against 'undefined' or empty sources
+  if (!videoUrl || videoUrl === 'undefined') {
+    return null;
+  }
+
+  // Diagnostic Log to confirm valid string before rendering
+  console.log('Rendering Player with URL:', videoUrl);
 
   // Sync with external state (Watch Party / SQL Mesh Sync)
   useEffect(() => {
-    if (!videoRef.current || !externalState || !isValidSrc) return;
+    if (!videoRef.current || !externalState) return;
     
     const targetTime = externalState.currentTime;
     
@@ -39,40 +44,30 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
         // Autoplay may be blocked by browser policy
       });
     }
-  }, [externalState, isValidSrc]);
+  }, [externalState, videoUrl]);
 
-  // Expose playback state to parent (ConversationPanel/WatchParty)
+  // Expose playback state to parent
   useImperativeHandle(ref, () => ({
     getCurrentTime: () => videoRef.current?.currentTime || 0,
     getIsPaused: () => videoRef.current?.paused || false
   }));
 
-  if (!isValidSrc) {
-    return (
-      <div className="relative aspect-video bg-black/40 backdrop-blur-sm rounded-3xl flex flex-col items-center justify-center gap-4 border border-white/5 overflow-hidden shadow-2xl">
-        <Loader2 className="animate-spin text-accent" size={32} />
-        <div className="text-[10px] font-code text-accent uppercase tracking-widest animate-pulse">
-          Resolving SQL Transmission...
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="relative aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/5 group">
       <video
+        key={videoUrl} // CRITICAL: Forces React to recreate the element when URL changes
         ref={videoRef}
         className="w-full h-full rounded-lg"
         controls
         autoPlay
         playsInline
         preload="metadata"
-        crossOrigin="anonymous" // Essential for cross-origin media handshake
+        crossOrigin="anonymous"
         onError={(e) => {
-          console.error('SQL Sync Failed:', e.currentTarget.error?.message, `(Code: ${e.currentTarget.error?.code})`);
+          console.error('Mesh Sync Failed:', e.currentTarget.error?.message, `(Code: ${e.currentTarget.error?.code})`);
         }}
       >
-        <source src={src} type="video/mp4" />
+        <source src={videoUrl} type="video/mp4" />
       </video>
     </div>
   );
