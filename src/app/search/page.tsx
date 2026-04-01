@@ -5,7 +5,6 @@ import { useSearchParams } from 'next/navigation';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import VideoCard from '@/components/video-card/VideoCard';
-import { getB2Videos } from '@/app/actions/b2-store';
 import { useSearch } from '@/hooks/use-search';
 import { Search, Loader2, Sparkles, DatabaseZap } from 'lucide-react';
 
@@ -20,9 +19,15 @@ function SearchContent() {
   useEffect(() => {
     async function load() {
       setIsInitialLoad(true);
-      const vids = await getB2Videos();
-      setAllVideos(vids);
-      setIsInitialLoad(false);
+      try {
+        const res = await fetch('/api/videos?limit=100');
+        const data = await res.json();
+        setAllVideos(Array.isArray(data) ? data : []);
+      } catch (e) {
+        console.error('SQL Search Load Failure');
+      } finally {
+        setIsInitialLoad(false);
+      }
     }
     load();
   }, []);
@@ -37,14 +42,14 @@ function SearchContent() {
           </h2>
         </div>
         <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-[10px] text-accent font-code">
-          <DatabaseZap size={12} /> B2 INDEX SEARCH ACTIVE
+          <DatabaseZap size={12} /> SQL REGISTRY SEARCH ACTIVE
         </div>
       </div>
 
       {isInitialLoad || (isSearching && results.length === 0) ? (
         <div className="flex flex-col items-center justify-center py-24 gap-4 opacity-50">
           <Loader2 className="animate-spin text-accent" size={40} />
-          <p className="font-code text-xs tracking-widest uppercase">Querying B2 Mesh Registry...</p>
+          <p className="font-code text-xs tracking-widest uppercase">Querying SQL Mesh...</p>
         </div>
       ) : results.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-12">
@@ -63,7 +68,7 @@ function SearchContent() {
         <div className="flex flex-col items-center justify-center py-32 text-muted-foreground opacity-30 text-center">
           <Search size={64} className="mb-6" />
           <h3 className="text-xl font-headline font-bold text-white mb-2 uppercase tracking-widest">No Transmissions Found</h3>
-          <p className="max-w-xs font-body text-sm">Our sensors couldn't locate any data packets matching your query on the B2 mesh.</p>
+          <p className="max-w-xs font-body text-sm">Our sensors couldn't locate any data packets matching your query on the SQL mesh.</p>
         </div>
       )}
     </main>

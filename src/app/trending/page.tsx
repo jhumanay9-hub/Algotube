@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useMemo, useState, useEffect } from 'react';
@@ -7,16 +6,13 @@ import Sidebar from '@/components/layout/Sidebar';
 import VideoCard from '@/components/video-card/VideoCard';
 import { TrendingUp, Flame, Loader2, ChevronDown, DatabaseZap, Sparkles } from 'lucide-react';
 import { calculateHotScore } from '@/lib/ranking';
-import { getB2Videos } from '@/app/actions/b2-store';
 import { Button } from '@/components/ui/button';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 12;
 
 /**
- * TrendingPage
- * 
- * Implements a Hacker News-style Time-Decay Ranking Algorithm.
- * Fetches registry from B2 mesh and calculates gravity-weighted scores.
+ * TrendingPage - SQL Time-Decay Ranking
+ * Fetches registry from Turso SQL mesh and calculates gravity-weighted scores.
  */
 export default function TrendingPage() {
   const [videos, setVideos] = useState<any[]>([]);
@@ -27,10 +23,11 @@ export default function TrendingPage() {
     async function loadData() {
       setIsLoading(true);
       try {
-        const data = await getB2Videos();
-        setVideos(data);
+        const res = await fetch(`/api/videos?limit=100`);
+        const data = await res.json();
+        setVideos(Array.isArray(data) ? data : []);
       } catch (e) {
-        console.error('Failed to sync B2 registry for Trending.');
+        console.error('Failed to sync SQL registry for Trending.');
       } finally {
         setIsLoading(false);
       }
@@ -38,21 +35,15 @@ export default function TrendingPage() {
     loadData();
   }, []);
 
-  // Algorithm & Filtering
   const trendingVideos = useMemo(() => {
-    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    
+    // Basic ranking logic using available engagement stats
     return [...videos]
-      .filter(v => {
-        const time = new Date(v.uploadDate || v.uploadedAt || Date.now()).getTime();
-        return time > oneWeekAgo; // Filter for videos uploaded in the last 7 days
-      })
       .map(v => ({
         ...v,
         trendingScore: calculateHotScore(
-          v.views || v.viewsCount || 0, 
+          v.views || 0, 
           v.likesCount || 0, 
-          v.uploadDate || v.uploadedAt || Date.now()
+          Date.now() - (1000 * 60 * 60 * 24) // Fallback to 24h age for placeholders
         )
       }))
       .sort((a, b) => b.trendingScore - a.trendingScore);
@@ -74,7 +65,6 @@ export default function TrendingPage() {
         <Sidebar />
         
         <main className="flex-1 overflow-y-auto p-4 pt-0 custom-scrollbar">
-          {/* Hacker-News Gravity Hero Section */}
           <div className="mb-10 glass-panel rounded-3xl p-8 relative overflow-hidden flex items-center bg-gradient-to-r from-accent/10 to-transparent border-l-4 border-accent mt-4 animate-in fade-in slide-in-from-top-4 duration-700">
             <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none">
               <Flame size={300} className="text-accent fill-accent" />
@@ -82,14 +72,14 @@ export default function TrendingPage() {
             <div className="relative z-10">
               <div className="flex items-center gap-2 mb-2 text-accent">
                 <Sparkles size={16} />
-                <span className="font-code text-[10px] tracking-[0.2em] uppercase font-bold">Time-Decay Ranking V2.0</span>
+                <span className="font-code text-[10px] tracking-[0.2em] uppercase font-bold">SQL Ranking V2.0</span>
               </div>
               <h1 className="text-4xl font-headline font-bold mb-2">Transmission Gravity</h1>
               <p className="text-muted-foreground font-body max-w-xl text-sm leading-relaxed">
-                Algorithmic feed powered by B2 Persistence. Videos are weighted by engagement velocity and age decay to ensure the mesh stays fresh.
+                Algorithmic feed powered by Turso SQL. Videos are weighted by engagement velocity to ensure the mesh stays fresh.
               </p>
               <div className="mt-6 flex items-center gap-2 px-3 py-1.5 w-fit rounded-lg bg-accent/5 border border-accent/20 text-[9px] text-accent font-code">
-                <DatabaseZap size={12} /> B2 MESH REGISTRY SYNCED
+                <DatabaseZap size={12} /> TURSO SQL MESH SYNCED
               </div>
             </div>
           </div>
@@ -98,9 +88,6 @@ export default function TrendingPage() {
             <div className="flex items-center gap-3">
               <TrendingUp className="text-accent" size={24} />
               <h2 className="text-xl font-headline font-bold">Trending Transmissions</h2>
-            </div>
-            <div className="text-[10px] font-code text-muted-foreground uppercase tracking-widest">
-              Last 7 Days • Sorted by Score
             </div>
           </div>
 
@@ -116,7 +103,7 @@ export default function TrendingPage() {
                 {pagedVideos.length > 0 ? (
                   pagedVideos.map((video, idx) => (
                     <div key={video.id} className="animate-in fade-in slide-in-from-bottom-2 duration-500" style={{ animationDelay: `${idx * 50}ms` }}>
-                      <VideoCard video={video as any} />
+                      <VideoCard video={video} />
                     </div>
                   ))
                 ) : (

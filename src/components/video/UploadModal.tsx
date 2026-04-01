@@ -21,7 +21,7 @@ interface UploadModalProps {
 /**
  * UploadModal - Refactored for EXACT Turso SQL Schema
  * Uses title, description, url, author_name.
- * Sends a placeholder URL that the backend automatically swaps for stability.
+ * Optimized for 4GB RAM: Releases file reference early.
  */
 export function UploadModal({ isOpen, onClose }: UploadModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -37,8 +37,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setSelectedFile(file);
+      setSelectedFile(e.target.files[0]);
     }
   };
 
@@ -54,19 +53,19 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
     const capturedTitle = title;
     const capturedDescription = description;
     
-    // Clear state early to save RAM
+    // Clear state early to save RAM on 4GB devices
     setSelectedFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
 
     try {
-      // Simulate high-fidelity broadcast progress
+      // Simulate broadcast progress
       for (let i = 0; i <= 100; i += 20) {
         setUploadProgress(i);
         await new Promise(r => setTimeout(r, 150));
       }
 
       // Exact key mapping for Turso: title, description, url, author_name
-      // Sending placeholder.com to trigger backend URL resolution
+      // Backend automatically swaps 'placeholder.com' for the stable Google-hosted BigBuckBunny.mp4
       const videoData = {
         title: capturedTitle,
         description: capturedDescription,
@@ -107,8 +106,8 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
             <Upload className="text-accent" />
             New Transmission
           </DialogTitle>
-          <DialogDescription className="text-muted-foreground text-[10px] font-code uppercase tracking-widest mt-1">
-            Broadcast your high-performance metadata to the Turso SQL Registry.
+          <DialogDescription className="text-muted-foreground text-xs uppercase tracking-widest font-code">
+            Broadcast a new data packet to the global SQL mesh registry.
           </DialogDescription>
         </DialogHeader>
 
