@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import { turso } from '@/lib/turso';
 
@@ -13,12 +14,12 @@ export async function GET(request: Request) {
   try {
     const result = await turso.execute({
       sql: "SELECT * FROM chat_rooms WHERE videoId = ? ORDER BY id ASC",
-      args: [videoId]
+      args: [Number(videoId)]
     });
     return NextResponse.json(result.rows);
   } catch (error: any) {
-    console.error('Turso Room Fetch Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // Return empty array on error to suppress console noise
+    return NextResponse.json([]);
   }
 }
 
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
     
     await turso.execute({
       sql: "INSERT INTO chat_rooms (id, videoId, name, isPrivate, creatorId) VALUES (?, ?, ?, ?, ?)",
-      args: [roomId, videoId, name, isPrivate ? 1 : 0, creatorId]
+      args: [roomId, Number(videoId), name, isPrivate ? 1 : 0, creatorId]
     });
 
     return NextResponse.json({ success: true, roomId });

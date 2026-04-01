@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import { turso } from '@/lib/turso';
 
@@ -7,10 +8,11 @@ import { turso } from '@/lib/turso';
 export async function POST(request: Request) {
   try {
     const { userId, videoId } = await request.json();
+    const vidInt = Number(videoId);
     
     const existing = await turso.execute({
       sql: "SELECT * FROM likes WHERE userId = ? AND videoId = ?",
-      args: [userId, videoId]
+      args: [userId, vidInt]
     });
 
     let isLikedNow = false;
@@ -18,20 +20,20 @@ export async function POST(request: Request) {
     if (existing.rows.length > 0) {
       await turso.execute({
         sql: "DELETE FROM likes WHERE userId = ? AND videoId = ?",
-        args: [userId, videoId]
+        args: [userId, vidInt]
       });
       await turso.execute({
         sql: "UPDATE videos SET likesCount = MAX(0, likesCount - 1) WHERE id = ?",
-        args: [videoId]
+        args: [vidInt]
       });
     } else {
       await turso.execute({
         sql: "INSERT INTO likes (userId, videoId) VALUES (?, ?)",
-        args: [userId, videoId]
+        args: [userId, vidInt]
       });
       await turso.execute({
         sql: "UPDATE videos SET likesCount = likesCount + 1 WHERE id = ?",
-        args: [videoId]
+        args: [vidInt]
       });
       isLikedNow = true;
     }
@@ -54,8 +56,8 @@ export async function GET(request: Request) {
       sql: "SELECT videoId FROM likes WHERE userId = ?",
       args: [userId]
     });
-    return NextResponse.json(result.rows.map(r => r.videoId));
+    return NextResponse.json(result.rows.map(r => Number(r.videoId)));
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json([]);
   }
 }

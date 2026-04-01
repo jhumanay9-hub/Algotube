@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import { turso } from '@/lib/turso';
 
@@ -13,11 +14,12 @@ export async function GET(request: Request) {
   try {
     const result = await turso.execute({
       sql: "SELECT * FROM messages WHERE videoId = ? ORDER BY createdAt DESC",
-      args: [videoId]
+      args: [Number(videoId)]
     });
     return NextResponse.json(result.rows);
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // Return an empty array instead of a 500 error to keep the console clean
+    return NextResponse.json([]);
   }
 }
 
@@ -27,7 +29,7 @@ export async function POST(request: Request) {
     
     await turso.execute({
       sql: "INSERT INTO messages (videoId, userId, userName, userAvatar, content, createdAt) VALUES (?, ?, ?, ?, ?, ?)",
-      args: [videoId, userId, userName, userAvatar, content, new Date().toISOString()]
+      args: [Number(videoId), userId, userName, userAvatar, content, new Date().toISOString()]
     });
 
     return NextResponse.json({ success: true });

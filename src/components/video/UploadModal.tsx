@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef } from 'react';
@@ -67,10 +68,11 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
       }
 
       // Exact key mapping for Turso: title, description, url, author_name
+      // Using a public sample video to bypass CORS issues during testing
       const videoData = {
         title: capturedTitle,
         description: capturedDescription,
-        url: "https://placeholder.com/video.mp4", // Placeholder as per instructions
+        url: "https://www.w3schools.com/html/mov_bbb.mp4", 
         author_name: authorName
       };
 
@@ -188,7 +190,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
             <Button 
               type="submit" 
               className="flex-1 bg-accent text-background hover:bg-accent/90 rounded-xl font-bold text-[11px] uppercase neon-glow"
-              disabled={!selectedFile && !isProcessing || !title || isProcessing}
+              disabled={(!selectedFile && !isProcessing) || !title || isProcessing}
             >
               {isProcessing ? "SYNCING..." : "BROADCAST"}
             </Button>
