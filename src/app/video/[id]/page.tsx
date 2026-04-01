@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
@@ -8,11 +9,10 @@ import ConversationPanel from '@/components/layout/ConversationPanel';
 import CanvasVideoPlayer from '@/components/video-player/CanvasVideoPlayer';
 import VideoCard from '@/components/video-card/VideoCard';
 import { useUser } from '@/firebase';
-import { MessageCircle, ThumbsUp, Eye, Sparkles, Loader2, Share2, Users } from 'lucide-react';
+import { MessageCircle, ThumbsUp, Eye, Sparkles, Loader2, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
-import { useS3Url } from '@/hooks/use-s3-url';
 import { cn } from '@/lib/utils';
 
 export default function VideoDetailPage() {
@@ -67,7 +67,6 @@ export default function VideoDetailPage() {
     loadData();
   }, [loadData]);
 
-  // Player State Polling for Leader Broadcast
   useEffect(() => {
     const timer = setInterval(() => {
       if (playerRef.current) {
@@ -105,8 +104,6 @@ export default function VideoDetailPage() {
     }
   };
 
-  const { url: streamUrl, isLoading: isStreamLoading } = useS3Url(video?.s3Key, video?.videoUrl);
-
   if (isLoading) {
     return (
       <div className="flex flex-col h-screen items-center justify-center gap-4 bg-background">
@@ -124,18 +121,11 @@ export default function VideoDetailPage() {
         <main className="flex-1 overflow-y-auto p-4 pt-0 custom-scrollbar flex flex-col xl:flex-row gap-6">
           <div className="flex-1 flex flex-col gap-6">
             <div className="relative aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl group border border-white/5">
-              {isStreamLoading ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
-                  <Loader2 className="animate-spin text-accent" />
-                  <p className="text-[10px] font-code text-accent uppercase">Syncing B2 Stream...</p>
-                </div>
-              ) : (
-                <CanvasVideoPlayer 
-                  ref={playerRef}
-                  src={streamUrl} 
-                  externalState={externalSyncState} 
-                />
-              )}
+              <CanvasVideoPlayer 
+                ref={playerRef}
+                src={video?.videoUrl} 
+                externalState={externalSyncState} 
+              />
             </div>
             
             <div className="glass-panel rounded-3xl p-8 relative overflow-hidden">

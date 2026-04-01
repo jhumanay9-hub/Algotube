@@ -7,14 +7,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, Loader2, FileVideo, ShieldAlert, DatabaseZap, AlertCircle, Zap } from 'lucide-react';
-import { useUser } from '@/firebase';
+import { Upload, Loader2, FileVideo, DatabaseZap, AlertCircle, Zap } from 'lucide-react';
+import { useUser, useStorage } from '@/firebase';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { useToast } from '@/hooks/use-toast';
 import { analyzeVideoContent } from '@/ai/flows/analyze-video-content-flow';
-import { getPresignedUploadUrl } from '@/app/actions/s3-actions';
 import { generatePrefixes } from '@/lib/search-utils';
-import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
 
 interface UploadModalProps {
   isOpen: boolean;
@@ -23,8 +23,8 @@ interface UploadModalProps {
 }
 
 /**
- * UploadModal - B2 Media + Turso Metadata Integration
- * Broadcasts video files to Backblaze and metadata to Turso SQL mesh.
+ * UploadModal - Firebase Media + Turso Metadata Integration
+ * Broadcasts video files to Firebase Storage and metadata to Turso SQL mesh.
  */
 export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -36,6 +36,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
   const [uploadError, setUploadError] = useState<string | null>(null);
   
   const { user } = useUser();
+  const storage = useStorage();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -52,12 +53,8 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
     setUploadError(null);
     
     try {
-      const fileName = `${Date.now()}-${selectedFile.name.replace(/\s+/g, '_')}`;
-      
-      const [aiResult, uploadAuth] = await Promise.all([
-        analyzeVideoContent({ title, description }),
-        getPresignedUploadUrl(fileName, selectedFile.type)
-      ]);
+      // 1. AI Safety & SEO Analysis
+      const aiResult = await analyzeVideoContent({ title, description });
 
       if (!aiResult.isSafe) {
         toast({ variant: "destructive", title: "Transmission Denied", description: aiResult.safetyReason || "Content flagged by safety mesh." });
@@ -65,68 +62,75 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
         return;
       }
 
-      const uploadPromise = new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('PUT', uploadAuth.url);
-        xhr.setRequestHeader('Content-Type', selectedFile.type);
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) setUploadProgress((e.loaded / e.total) * 100);
-        };
-        xhr.onload = () => (xhr.status >= 200 && xhr.status < 300) ? resolve() : reject(new Error(`B2 rejection: ${xhr.statusText}`));
-        xhr.onerror = () => {
-          const corsHint = "Network interruption (likely CORS). Ensure your B2 Bucket CORS allows 'PUT' from this origin.";
-          reject(new Error(corsHint));
-        };
-        xhr.send(selectedFile);
-      });
+      // 2. Prepare Firebase Storage Path
+      const fileName = `${Date.now()}-${selectedFile.name.replace(/\s+/g, '_')}`;
+      const storageRef = ref(storage, `videos/${user.uid}/${fileName}`);
+      
+      // Release file from state-based memory tracking early by creating local ref
+      const fileToUpload = selectedFile;
+      setSelectedFile(null); // Clear state early for 4GB RAM optimization
 
-      await uploadPromise;
+      // 3. Resumable Upload to Firebase
+      const uploadTask = uploadBytesResumable(storageRef, fileToUpload);
 
-      const isShort = category === 'Shorts' || forcedCategory === 'Shorts';
-      const searchKeywords = generatePrefixes(title);
-      const tags = [...aiResult.seoTags];
-      if (isShort && !tags.includes('short')) tags.push('short');
+      uploadTask.on('state_changed', 
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadProgress(progress);
+        }, 
+        (error) => {
+          console.error('Firebase Storage Error:', error);
+          let message = "Transmission failed.";
+          if (error.code === 'storage/unauthorized') message = "Permission denied in Cloud Storage.";
+          if (error.code === 'storage/canceled') message = "Broadcast canceled by user.";
+          setUploadError(message);
+          setIsProcessing(false);
+        }, 
+        async () => {
+          // 4. Finalize Metadata in Turso SQL Mesh
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          const isShort = category === 'Shorts' || forcedCategory === 'Shorts';
+          const searchKeywords = generatePrefixes(title);
+          const tags = [...aiResult.seoTags];
+          if (isShort && !tags.includes('short')) tags.push('short');
 
-      const videoData = {
-        id: fileName,
-        title,
-        description,
-        aiSummary: aiResult.summary,
-        videoUrl: fileName,
-        thumbnail: `https://picsum.photos/seed/${Math.floor(Math.random() * 1000)}/640/360`,
-        uploaderId: user.uid,
-        uploadDate: new Date().toISOString(),
-        category,
-        tags,
-        searchKeywords,
-        s3Key: fileName,
-        s3Bucket: uploadAuth.bucket,
-        aspectRatio: isShort ? '9:16' : '16:9'
-      };
+          const videoData = {
+            id: fileName,
+            title,
+            description,
+            aiSummary: aiResult.summary,
+            videoUrl: downloadURL,
+            thumbnail: `https://picsum.photos/seed/${Math.floor(Math.random() * 1000)}/640/360`,
+            uploaderId: user.uid,
+            uploadDate: new Date().toISOString(),
+            category,
+            tags,
+            searchKeywords,
+            aspectRatio: isShort ? '9:16' : '16:9'
+          };
 
-      // PERSIST TO TURSO SQL MESH
-      const tursoRes = await fetch('/api/videos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(videoData)
-      });
+          const tursoRes = await fetch('/api/videos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(videoData)
+          });
 
-      if (!tursoRes.ok) throw new Error('Turso Mesh Write Failed');
+          if (!tursoRes.ok) throw new Error('Turso Mesh Write Failed');
 
-      toast({ title: "Broadcast Successful", description: "Metadata persisted to Turso SQL Mesh." });
-      onClose();
-      setIsProcessing(false);
-      setTitle('');
-      setDescription('');
-      setSelectedFile(null);
+          toast({ title: "Broadcast Successful", description: "Metadata persisted to Turso SQL Mesh." });
+          onClose();
+          setIsProcessing(false);
+          setTitle('');
+          setDescription('');
+        }
+      );
+
     } catch (error: any) {
       console.error('Mesh Failure:', error);
       setUploadError(error?.message || "Transmission interrupted.");
       setIsProcessing(false);
     }
   };
-
-  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'your-site.com';
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -144,18 +148,6 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
               <AlertTitle className="text-red-500 font-bold">Broadcast Interrupted</AlertTitle>
               <AlertDescription className="text-red-200/80 text-xs">
                 {uploadError}
-                {uploadError.includes('CORS') && (
-                  <div className="mt-4 p-4 bg-black/60 rounded-xl border border-red-500/20 font-code leading-relaxed">
-                    <p className="mb-2 font-bold text-accent underline uppercase">B2 CORS GUIDE:</p>
-                    <div className="space-y-1">
-                      <p>1. Open B2 Cloud Storage Console</p>
-                      <p>2. Go to Bucket Settings {'->'} CORS</p>
-                      <p>3. Set Allowed Origin to: <span className="text-white font-bold">{currentOrigin}</span></p>
-                      <p>4. Allowed Methods: <span className="text-white">GET, PUT, POST</span></p>
-                      <p>5. Allowed Headers: <span className="text-white">content-type, authorization</span></p>
-                    </div>
-                  </div>
-                )}
               </AlertDescription>
             </Alert>
           )}
@@ -163,11 +155,12 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
           {isProcessing ? (
             <div className="flex flex-col items-center justify-center py-12 gap-6 text-center">
               <div className="w-24 h-24 border-4 rounded-full animate-spin border-accent/10 border-t-accent shadow-[0_0_20px_rgba(116,222,236,0.1)]" />
-              <div>
+              <div className="w-full max-w-xs space-y-4">
+                <Progress value={uploadProgress} className="h-2 bg-white/5" />
                 <p className="font-code text-sm font-bold text-accent uppercase tracking-widest animate-pulse">
                   Broadcasting: {Math.round(uploadProgress)}%
                 </p>
-                <p className="text-[10px] text-muted-foreground mt-2 uppercase">Syncing B2 Mesh Nodes...</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Syncing Cloud Nodes...</p>
               </div>
             </div>
           ) : (

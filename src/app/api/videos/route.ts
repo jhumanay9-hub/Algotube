@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import { turso } from '@/lib/turso';
 
@@ -47,13 +48,13 @@ export async function POST(request: Request) {
       sql: `INSERT INTO videos (
         id, title, description, videoUrl, thumbnailUrl, uploaderId, 
         uploadDate, viewsCount, likesCount, category, tags, 
-        aspectRatio, s3Key, s3Bucket
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        aspectRatio
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         data.id, data.title, data.description, data.videoUrl, data.thumbnail, 
         data.uploaderId, data.uploadDate, 0, 0, data.category, 
         Array.isArray(data.tags) ? data.tags.join(',') : '', 
-        data.aspectRatio, data.s3Key, data.s3Bucket
+        data.aspectRatio
       ]
     });
 

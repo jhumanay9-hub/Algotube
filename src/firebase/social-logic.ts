@@ -2,16 +2,16 @@
 'use client';
 
 /**
- * DEPRECATED: ALL SOCIAL LOGIC TRANSITIONED TO BACKBLAZE B2 MESH.
+ * DEPRECATED: ALL SOCIAL LOGIC TRANSITIONED TO TURSO SQL MESH.
  * 
- * Please use @/app/actions/b2-social.ts and @/app/actions/b2-store.ts 
- * to ensure stability and bypass Firestore permission/proxy errors.
+ * Please use @/app/actions/turso-actions.ts 
+ * to ensure stability and bypass legacy B2 or Firestore permission errors.
  */
 
 export async function toggleSubscription() {
-  console.warn('social-logic.ts is deprecated. Use B2 Social Actions.');
+  console.warn('social-logic.ts is deprecated. Use Turso Social Actions.');
 }
 
 export async function addToHistory() {
-  console.warn('social-logic.ts is deprecated. Use B2 Store Actions.');
+  console.warn('social-logic.ts is deprecated. Use Turso Social Actions.');
 }

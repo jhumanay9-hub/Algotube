@@ -2,10 +2,9 @@
 "use client";
 
 import React from 'react';
-import { Play, MoreVertical, Eye, Clock, Loader2 } from 'lucide-react';
+import { Play, MoreVertical, Eye, Clock } from 'lucide-react';
 import { VideoMetadata } from '@/lib/sorting';
 import Link from 'next/link';
-import { useS3Url } from '@/hooks/use-s3-url';
 
 interface VideoCardProps {
   video: VideoMetadata;
@@ -17,10 +16,6 @@ export default function VideoCard({ video }: VideoCardProps) {
     : (video.views / 1000).toFixed(0) + 'K';
 
   const uploaderId = (video as any).uploaderId || video.id;
-  const s3Key = (video as any).s3Key || (video as any).videoUrl; // Fallback to videoUrl if key not explicit
-
-  // Resolve the URL for the preview (if we want to use B2 for thumbnails or just use the mock ones)
-  // For now, let's just use the mock thumbnail provided in the video object
   const thumbnail = video.thumbnail || `https://picsum.photos/seed/${video.id}/600/400`;
 
   return (
