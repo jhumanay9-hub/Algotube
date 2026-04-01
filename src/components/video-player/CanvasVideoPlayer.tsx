@@ -2,7 +2,6 @@
 "use client";
 
 import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
-import { Loader2 } from 'lucide-react';
 
 interface CanvasVideoPlayerProps {
   videoUrl: string | null;
@@ -12,17 +11,17 @@ interface CanvasVideoPlayerProps {
 
 /**
  * CanvasVideoPlayer - Standard HTML5 Implementation
- * Refactored to handle SQL Mesh race conditions with strict mounting guards.
+ * Hardened to prevent race conditions and handle SQL Mesh synchronization.
  */
 const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ videoUrl, externalState }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   
-  // Guard against 'undefined' or empty sources
+  // Prop Check: Immediately return null if videoUrl is missing to prevent 'undefined' errors
   if (!videoUrl || videoUrl === 'undefined') {
     return null;
   }
 
-  // Diagnostic Log to confirm valid string before rendering
+  // Diagnostic Log: Confirm the Mesh has delivered a valid string
   console.log('Rendering Player with URL:', videoUrl);
 
   // Sync with external state (Watch Party / SQL Mesh Sync)
@@ -55,16 +54,19 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ videoUrl, e
   return (
     <div className="relative aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/5 group">
       <video
-        key={videoUrl} // CRITICAL: Forces React to recreate the element when URL changes
+        key={videoUrl} // FORCE RE-INITIALIZATION: Only when a valid URL is delivered from the Mesh
         ref={videoRef}
         className="w-full h-full rounded-lg"
         controls
         autoPlay
         playsInline
-        preload="metadata"
+        preload="auto"
         crossOrigin="anonymous"
         onError={(e) => {
-          console.error('Mesh Sync Failed:', e.currentTarget.error?.message, `(Code: ${e.currentTarget.error?.code})`);
+          // Only log if we actually have a URL to load
+          if (videoUrl && videoUrl !== 'undefined') {
+            console.error('Mesh Sync Failed:', e.currentTarget.error?.message, `(Code: ${e.currentTarget.error?.code})`);
+          }
         }}
       >
         <source src={videoUrl} type="video/mp4" />

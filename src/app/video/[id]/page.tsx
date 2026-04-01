@@ -153,12 +153,18 @@ export default function VideoDetailPage() {
     );
   }
 
-  if (!video) {
+  // Guard Clause: If Mesh delivers no data, stop player rendering
+  if (!video || !video.url) {
     return (
       <div className="flex flex-col h-screen overflow-hidden">
         <Navbar />
-        <div className="flex flex-1 items-center justify-center text-muted-foreground font-code uppercase text-xs">
-          Transmission not found in SQL registry
+        <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground gap-4">
+          <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
+            <Users size={40} className="opacity-20" />
+          </div>
+          <h2 className="text-xl font-headline font-bold text-white uppercase tracking-widest">Transmission Not Found</h2>
+          <p className="font-code text-[10px] uppercase">Data packet missing in SQL registry</p>
+          <Button variant="outline" onClick={() => window.history.back()} className="mt-4 rounded-xl">Return to Hub</Button>
         </div>
       </div>
     );
@@ -172,7 +178,7 @@ export default function VideoDetailPage() {
         <main className="flex-1 overflow-y-auto p-4 pt-0 custom-scrollbar flex flex-col xl:flex-row gap-6">
           <div className="flex-1 flex flex-col gap-6">
             <div className="relative aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl group border border-white/5">
-              {/* STAGE 1: Prevent player mount until URL is confirmed */}
+              {/* STAGE 1: Prevent player mount until URL is confirmed and Loading is finished */}
               {!isLoading && video?.url ? (
                 <CanvasVideoPlayer 
                   ref={playerRef}
