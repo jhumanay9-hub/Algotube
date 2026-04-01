@@ -32,7 +32,7 @@ export default function VideoCard({ video }: VideoCardProps) {
           alt={video.title} 
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px] pointer-events-none">
           <div className="w-12 h-12 rounded-full bg-accent/20 border border-accent/40 flex items-center justify-center">
             <Play size={24} className="text-accent fill-accent translate-x-0.5" />
           </div>

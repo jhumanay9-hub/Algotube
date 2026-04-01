@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useRef, useEffect, useState } from 'react';
@@ -90,14 +91,14 @@ export default function ShortsPlayer({ video }: ShortsPlayerProps) {
           </div>
         )}
 
-        {/* Content Info Overlay */}
-        <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
+        {/* Content Info Overlay - pointer-events-none so we can click the video */}
+        <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 via-black/40 to-transparent pointer-events-none">
           <div className="flex items-center gap-3 mb-4">
-            <Avatar className="h-10 w-10 border-2 border-accent">
+            <Avatar className="h-10 w-10 border-2 border-accent pointer-events-auto">
               <AvatarImage src={`https://picsum.photos/seed/${video.author_name}/100/100`} />
               <AvatarFallback>{video.author_name?.[0]}</AvatarFallback>
             </Avatar>
-            <div className="flex-1">
+            <div className="flex-1 pointer-events-auto">
               <h4 className="font-headline font-bold text-sm text-white flex items-center gap-2">
                 @{video.author_name}
                 <Button variant="ghost" className="h-6 px-2 text-[10px] bg-accent text-background font-bold hover:bg-accent/80 rounded-md">
@@ -107,7 +108,7 @@ export default function ShortsPlayer({ video }: ShortsPlayerProps) {
             </div>
           </div>
           
-          <p className="text-sm text-white/90 font-body mb-3 line-clamp-2">{video.title}</p>
+          <p className="text-sm text-white/90 font-body mb-3 line-clamp-2 pointer-events-auto">{video.title}</p>
           
           <div className="flex items-center gap-2 text-xs text-white/60 font-code animate-pulse">
             <Music size={12} className="text-accent" />
@@ -116,7 +117,7 @@ export default function ShortsPlayer({ video }: ShortsPlayerProps) {
         </div>
 
         {/* Action Sidebar */}
-        <div className="absolute right-4 bottom-24 flex flex-col gap-6 items-center">
+        <div className="absolute right-4 bottom-24 flex flex-col gap-6 items-center z-20">
           <div className="flex flex-col items-center gap-1 group/btn cursor-pointer">
             <div className="w-12 h-12 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center hover:bg-accent/20 hover:border-accent/40 transition-all">
               <ThumbsUp className="text-white group-hover/btn:text-accent" size={24} />

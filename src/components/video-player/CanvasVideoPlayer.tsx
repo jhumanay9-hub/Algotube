@@ -135,12 +135,14 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
         ref={canvasRef}
         width={1920}
         height={1080}
-        className="w-full h-full cursor-pointer"
+        className="w-full h-full cursor-pointer z-0"
         onClick={togglePlay}
       />
 
-      <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
-        <div className="absolute bottom-0 left-0 right-0 p-6 flex flex-col gap-4">
+      {/* Overlay - pointer-events-none so we can click the canvas through it */}
+      <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'} pointer-events-none z-10`}>
+        {/* Controls Container - pointer-events-auto so we can interact with buttons */}
+        <div className="absolute bottom-0 left-0 right-0 p-6 flex flex-col gap-4 pointer-events-auto">
           <Slider 
             value={[progress]} 
             max={100} 
@@ -183,7 +185,7 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
       </div>
       
       {!isPlaying && (!videoRef.current || !videoRef.current.currentTime) && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-none">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-none z-20">
           <div className="w-20 h-20 rounded-full bg-accent/20 border border-accent/40 flex items-center justify-center neon-glow">
             <Play size={40} className="text-accent fill-accent translate-x-1" />
           </div>
