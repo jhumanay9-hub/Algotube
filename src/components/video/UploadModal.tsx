@@ -8,11 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Upload, Loader2, FileVideo, AlertCircle, Sparkles } from 'lucide-react';
+import { Upload, Loader2, FileVideo, AlertCircle } from 'lucide-react';
 import { useUser } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
-import { analyzeVideoContent } from '@/ai/flows/analyze-video-content-flow';
-import { generatePrefixes } from '@/lib/search-utils';
 
 interface UploadModalProps {
   isOpen: boolean;
@@ -21,16 +19,15 @@ interface UploadModalProps {
 }
 
 /**
- * UploadModal - SQL Mesh Implementation
- * Firebase used for AUTH ONLY. 
- * Broadcasts metadata to Turso SQL Registry with simulated high-performance progress.
+ * UploadModal - Refactored for EXACT Turso SQL Schema
+ * Uses title, description, url, author_name.
+ * Releases memory immediately to support 4GB RAM devices.
  */
-export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProps) {
+export function UploadModal({ isOpen, onClose }: UploadModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState(forcedCategory || 'Social Life');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   
@@ -41,14 +38,6 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      if (file.size > 100 * 1024 * 1024) { 
-        toast({ 
-          variant: "destructive", 
-          title: "Bandwidth Limit", 
-          description: "Limit transmissions to 100MB for mesh stability." 
-        });
-        return;
-      }
       setSelectedFile(file);
     }
   };
@@ -61,45 +50,28 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
     setUploadProgress(0);
     setUploadError(null);
     
+    // Capture metadata and release large file object from memory immediately
+    const authorName = user.displayName || user.email || 'Anonymous';
+    const capturedTitle = title;
+    const capturedDescription = description;
+    
+    // Clear state early to save RAM
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+
     try {
-      // 1. AI Safety & SEO Analysis
-      const aiResult = await analyzeVideoContent({ title, description });
-
-      if (!aiResult.isSafe) {
-        toast({ 
-          variant: "destructive", 
-          title: "Transmission Rejected", 
-          description: aiResult.safetyReason || "Content flagged by AI safety mesh." 
-        });
-        setIsProcessing(false);
-        return;
-      }
-
-      // 2. Simulated Broadcast Progress (Saving RAM/Battery on 4GB device)
-      // Since Firebase Storage is removed, we simulate the "upload" before saving to Turso.
-      for (let i = 0; i <= 100; i += 10) {
+      // Simulate high-fidelity broadcast progress
+      for (let i = 0; i <= 100; i += 20) {
         setUploadProgress(i);
-        await new Promise(r => setTimeout(r, 200));
+        await new Promise(r => setTimeout(r, 150));
       }
 
-      // 3. Sync with Turso SQL Mesh
-      const fileId = `trans_${Date.now()}`;
-      const isShort = category === 'Shorts' || forcedCategory === 'Shorts';
-      
+      // Exact key mapping for Turso: title, description, url, author_name
       const videoData = {
-        id: fileId,
-        title,
-        description,
-        aiSummary: aiResult.summary,
-        // Using a high-fidelity placeholder as media storage is now external/manual
-        videoUrl: "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-        thumbnail: `https://picsum.photos/seed/${fileId}/640/360`,
-        uploaderId: user.uid,
-        uploadDate: new Date().toISOString(),
-        category,
-        tags: aiResult.seoTags,
-        searchKeywords: generatePrefixes(title),
-        aspectRatio: isShort ? '9:16' : '16:9'
+        title: capturedTitle,
+        description: capturedDescription,
+        url: "https://placeholder.com/video.mp4", // Placeholder as per instructions
+        author_name: authorName
       };
 
       const tursoRes = await fetch('/api/videos', {
@@ -110,11 +82,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
 
       if (!tursoRes.ok) throw new Error('Turso SQL Mesh Write Rejected');
 
-      toast({ title: "Broadcast Successful", description: "Metadata persisted to SQL Mesh." });
-      
-      // Cleanup for 4GB device
-      setSelectedFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      toast({ title: "Broadcast Successful", description: "Transmission registered in SQL Mesh." });
       
       onClose();
       setIsProcessing(false);
@@ -165,7 +133,6 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
                   <p className="text-[9px] text-muted-foreground">READY FOR MESH SYNC</p>
                 </div>
               </div>
-              <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedFile(null)} className="text-[10px] uppercase font-bold text-accent">Change</Button>
             </div>
           )}
 
@@ -203,7 +170,6 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
                   <Loader2 className="animate-spin" size={12} />
                   <span>SQL SYNC: {uploadProgress}%</span>
                 </div>
-                <span className="text-muted-foreground">Broadcasting...</span>
               </div>
               <Progress value={uploadProgress} className="h-1 bg-white/5" />
             </div>
@@ -222,7 +188,7 @@ export function UploadModal({ isOpen, onClose, forcedCategory }: UploadModalProp
             <Button 
               type="submit" 
               className="flex-1 bg-accent text-background hover:bg-accent/90 rounded-xl font-bold text-[11px] uppercase neon-glow"
-              disabled={!selectedFile || !title || isProcessing}
+              disabled={!selectedFile && !isProcessing || !title || isProcessing}
             >
               {isProcessing ? "SYNCING..." : "BROADCAST"}
             </Button>

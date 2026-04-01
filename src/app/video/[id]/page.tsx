@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
@@ -29,7 +28,6 @@ export default function VideoDetailPage() {
   const [localPlayerState, setLocalPlayerState] = useState({ currentTime: 0, isPaused: true });
   
   const [isLiked, setIsLiked] = useState(false);
-  const [likesCount, setLikesCount] = useState(0);
   const [isSubscribed, setIsSubscribed] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -37,24 +35,16 @@ export default function VideoDetailPage() {
     try {
       const res = await fetch(`/api/videos?limit=10`);
       const vids = await res.json();
-      const found = vids.find((v: any) => v.id === id);
-      setVideo(found || vids[0]);
-      setRecommendations(vids.filter((v: any) => v.id !== id).slice(0, 3));
       
-      if (found) {
-        setLikesCount(found.likesCount || 0);
-      }
-
-      if (user) {
-        const [likesRes, subsRes] = await Promise.all([
-          fetch(`/api/likes?userId=${user.uid}`),
-          fetch(`/api/subscriptions?userId=${user.uid}`)
-        ]);
+      // Compare ID loosely since it can be string from URL and number from SQL
+      const found = vids.find((v: any) => v.id.toString() === id?.toString());
+      setVideo(found || vids[0]);
+      setRecommendations(vids.filter((v: any) => v.id.toString() !== id?.toString()).slice(0, 3));
+      
+      if (user && found) {
+        const likesRes = await fetch(`/api/likes?userId=${user.uid}`);
         const likedIds = await likesRes.json();
-        const subIds = await subsRes.json();
-        
         setIsLiked(likedIds.includes(id as string));
-        setIsSubscribed(subIds.includes(found?.uploaderId || ""));
       }
     } catch (e) {
       console.error('Mesh Sync Failed');
@@ -84,23 +74,15 @@ export default function VideoDetailPage() {
       toast({ title: "Auth Required", description: "Sign in to interact with mesh." });
       return;
     }
-
-    const prevLiked = isLiked;
-    const prevCount = likesCount;
-    setIsLiked(!prevLiked);
-    setLikesCount(prevLiked ? prevCount - 1 : prevCount + 1);
-
+    setIsLiked(!isLiked);
     try {
-      const res = await fetch('/api/likes', {
+      await fetch('/api/likes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.uid, videoId: id })
       });
-      const data = await res.json();
-      setIsLiked(data.isLikedNow);
     } catch (e) {
-      setIsLiked(prevLiked);
-      setLikesCount(prevCount);
+      setIsLiked(!isLiked);
     }
   };
 
@@ -123,20 +105,16 @@ export default function VideoDetailPage() {
             <div className="relative aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl group border border-white/5">
               <CanvasVideoPlayer 
                 ref={playerRef}
-                src={video?.videoUrl} 
+                src={video?.url} 
                 externalState={externalSyncState} 
               />
             </div>
             
             <div className="glass-panel rounded-3xl p-8 relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none">
-                <MessageCircle size={150} className="text-accent fill-accent" />
-              </div>
-              
               <div className="relative z-10">
                 <div className="flex items-center gap-3 mb-4">
                   <span className="bg-accent/20 text-accent text-[9px] font-code px-2 py-0.5 rounded-full border border-accent/30 uppercase">SQL Sync Mesh</span>
-                  <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-code">Transmission ID: {id?.slice(0, 8)}</span>
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-widest font-code">Node ID: {video?.id}</span>
                 </div>
 
                 <h1 className="text-3xl font-headline font-bold mb-6">{video?.title}</h1>
@@ -144,46 +122,34 @@ export default function VideoDetailPage() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                   <div className="flex items-center gap-4">
                     <Avatar className="h-14 w-14 rounded-2xl border-2 border-accent/20">
-                      <AvatarImage src={`https://picsum.photos/seed/${video?.uploaderId}/100/100`} />
-                      <AvatarFallback className="bg-white/5">{video?.creator?.[0]}</AvatarFallback>
+                      <AvatarFallback className="bg-white/5">{video?.author_name?.[0]?.toUpperCase()}</AvatarFallback>
                     </Avatar>
                     <div>
-                      <p className="font-headline font-bold text-lg">{video?.creator || "Mesh Creator"}</p>
-                      <p className="text-xs text-muted-foreground">Certified AlgoTube Citizen</p>
+                      <p className="font-headline font-bold text-lg">{video?.author_name || "Mesh Creator"}</p>
+                      <p className="text-xs text-muted-foreground">AlgoTube Citizen</p>
                     </div>
-                    <Button 
-                      className={cn(
-                        "ml-6 rounded-xl font-headline font-bold h-11 px-8 transition-all",
-                        isSubscribed ? "bg-accent/10 text-accent border border-accent/40" : "bg-white text-black hover:bg-white/90"
-                      )}
-                    >
-                      {isSubscribed ? "CONNECTED" : "CONNECT"}
-                    </Button>
                   </div>
                   
                   <div className="flex items-center gap-3">
                     <Button variant="ghost" onClick={handleLike} className={cn("rounded-2xl gap-3 h-12 px-6", isLiked ? "text-accent bg-accent/10 border border-accent/30" : "bg-white/5 border border-white/10")}>
                       <ThumbsUp size={18} className={isLiked ? "fill-accent" : ""} /> 
-                      <span className="font-bold">{likesCount}</span>
                     </Button>
                     <Button 
                       variant="ghost" 
                       onClick={() => setShowConversation(!showConversation)}
-                      className={cn("rounded-2xl gap-3 h-12 px-6 border", showConversation ? "border-accent text-accent bg-accent/5" : "bg-white/5 border-white/10")}
+                      className={cn("rounded-2xl gap-3 h-12 px-6 border", showConversation ? "border-accent text-accent bg-accent/5" : "bg-white/5 border border-white/10")}
                     >
                       <Users size={18} /> 
-                      <span className="font-bold">WATCH PARTY</span>
+                      <span className="font-bold text-xs uppercase tracking-widest">Chat</span>
                     </Button>
                   </div>
                 </div>
 
                 <div className="bg-black/20 rounded-2xl p-6 border border-white/5">
                   <div className="flex items-center gap-4 mb-4">
-                    <div className="flex items-center gap-1.5 text-accent font-code text-xs">
-                      <Eye size={14} /> {video?.viewsCount || 0} OBSERVED
+                    <div className="flex items-center gap-1.5 text-accent font-code text-[10px]">
+                      <Eye size={12} /> SYNCED FROM EDGE
                     </div>
-                    <div className="w-1 h-1 rounded-full bg-white/20" />
-                    <div className="text-xs text-muted-foreground font-code uppercase">Category: {video?.category}</div>
                   </div>
                   <p className="text-foreground/80 leading-relaxed font-body text-sm">{video?.description || "No encrypted metadata provided for this transmission."}</p>
                 </div>
@@ -206,7 +172,7 @@ export default function VideoDetailPage() {
           {showConversation && (
             <div className="w-full xl:w-96 shrink-0 animate-in slide-in-from-right-4 duration-500">
               <ConversationPanel 
-                videoId={id as string} 
+                videoId={id?.toString() as string} 
                 onSyncState={setExternalSyncState}
                 playerState={localPlayerState}
               />

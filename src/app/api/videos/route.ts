@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 import { turso } from '@/lib/turso';
 
@@ -6,31 +5,17 @@ import { turso } from '@/lib/turso';
  * Handles Global Video Discovery from Turso SQL Mesh
  */
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const category = searchParams.get('category');
-  const limit = parseInt(searchParams.get('limit') || '24');
-
   try {
-    let query = "SELECT * FROM videos";
-    let args: any[] = [];
+    const { searchParams } = new URL(request.url);
+    const limit = parseInt(searchParams.get('limit') || '24');
 
-    if (category && category !== 'All') {
-      query += " WHERE category = ?";
-      args.push(category);
-    }
-
-    query += " ORDER BY uploadDate DESC LIMIT ?";
-    args.push(limit);
-
-    const result = await turso.execute({ sql: query, args });
+    // Simple fetch based on the exact schema: id, title, description, url, author_name
+    const result = await turso.execute({
+      sql: "SELECT id, title, description, url, author_name FROM videos ORDER BY id DESC LIMIT ?",
+      args: [limit]
+    });
     
-    const videos = result.rows.map(row => ({
-      ...row,
-      tags: typeof row.tags === 'string' ? row.tags.split(',') : row.tags,
-      creator: row.uploaderId 
-    }));
-
-    return NextResponse.json(videos);
+    return NextResponse.json(result.rows);
   } catch (error: any) {
     console.error('Turso GET Videos Error:', error);
     return NextResponse.json({ error: 'Failed to fetch from SQL mesh' }, { status: 500 });
@@ -39,22 +24,22 @@ export async function GET(request: Request) {
 
 /**
  * Registers a new transmission in the Turso Registry
+ * Matches EXACT schema: title, description, url, author_name
+ * id is handled by DB auto-increment.
  */
 export async function POST(request: Request) {
   try {
-    const data = await request.json();
+    const { title, description, url, author_name } = await request.json();
     
+    // Prepared statement for security
     await turso.execute({
-      sql: `INSERT INTO videos (
-        id, title, description, videoUrl, thumbnailUrl, uploaderId, 
-        uploadDate, viewsCount, likesCount, category, tags, 
-        aspectRatio
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      sql: `INSERT INTO videos (title, description, url, author_name) 
+            VALUES (?, ?, ?, ?)`,
       args: [
-        data.id, data.title, data.description, data.videoUrl, data.thumbnail, 
-        data.uploaderId, data.uploadDate, 0, 0, data.category, 
-        Array.isArray(data.tags) ? data.tags.join(',') : '', 
-        data.aspectRatio
+        title, 
+        description || '', 
+        url, 
+        author_name || 'Anonymous'
       ]
     });
 
