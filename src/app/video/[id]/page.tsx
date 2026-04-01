@@ -19,7 +19,7 @@ const STABLE_FALLBACK_URL = "https://commondatastorage.googleapis.com/gtv-videos
 
 /**
  * VideoDetailPage - SQL Engagement Mesh
- * Hardened with strict URL sanitization and mounting guards to prevent 'undefined' race conditions.
+ * Refactored with strict loading guards and data verification logs.
  */
 export default function VideoDetailPage() {
   const { id } = useParams();
@@ -65,8 +65,11 @@ export default function VideoDetailPage() {
         found.url = videoUrl;
       }
 
-      // Final log to verify the sanitized SQL mesh transmission
+      // CRITICAL: VERIFICATION LOG
       console.log('SQL Mesh Data:', found);
+      if (found?.url) {
+        console.log('Final URL being sent to Player:', found.url);
+      }
 
       setVideo(found || null);
       setRecommendations(vids.filter((v: any) => v.id?.toString() !== vidStr).slice(0, 3));
@@ -79,6 +82,7 @@ export default function VideoDetailPage() {
     } catch (e: any) {
       console.error('Mesh Sync Failed:', e.message || e);
     } finally {
+      // Ensure state is set before loading is false
       setIsLoading(false);
     }
   }, [id, user]);
@@ -176,7 +180,7 @@ export default function VideoDetailPage() {
         <main className="flex-1 overflow-y-auto p-4 pt-0 custom-scrollbar flex flex-col xl:flex-row gap-6">
           <div className="flex-1 flex flex-col gap-6">
             <div className="relative aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl group border border-white/5">
-              {/* THE WAIT-FOR-MESH GUARD: Only mount player when data is ready */}
+              {/* THE WAIT-FOR-MESH GUARD: Only mount player when data is 100% ready */}
               {!isLoading && video?.url ? (
                 <CanvasVideoPlayer 
                   ref={playerRef}

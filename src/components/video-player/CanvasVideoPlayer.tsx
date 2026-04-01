@@ -12,11 +12,27 @@ interface CanvasVideoPlayerProps {
 
 /**
  * CanvasVideoPlayer - Standard HTML5 Implementation
- * Hardened with "Safety Guards" to prevent race conditions and handle SQL Mesh synchronization.
- * Refactored to use direct 'src' attribute for reliable error reporting.
+ * Hardened with "Wait for Mesh" guards and the "Key Hack" to prevent race conditions.
  */
 const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ videoUrl, externalState }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // 1. THE 'WAIT FOR MESH' GUARD:
+  // Prevent the video element from mounting if the URL is missing or malformed.
+  if (!videoUrl || videoUrl === 'undefined' || videoUrl.length < 10) {
+    return (
+      <div className="aspect-video bg-black/40 animate-pulse rounded-3xl border border-white/5 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 className="animate-spin text-accent" size={32} />
+          <p className="font-code text-[10px] text-accent uppercase tracking-widest">Resolving Registry...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. LOGGING:
+  // Confirming the render with a valid URL string.
+  console.log('Rendering Player with URL:', videoUrl);
   
   // Sync with external state (Watch Party / SQL Mesh Sync)
   useEffect(() => {
@@ -45,41 +61,25 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ videoUrl, e
     getIsPaused: () => videoRef.current?.paused || false
   }));
 
-  // GUARD: The "Wait for Mesh" Guard
-  // Returns a skeleton until a valid URL is delivered from Turso.
-  if (!videoUrl || videoUrl === 'undefined' || videoUrl === '') {
-    return (
-      <div className="aspect-video bg-white/5 animate-pulse rounded-3xl border border-white/10 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-2">
-          <Loader2 className="animate-spin text-accent" size={32} />
-          <p className="font-code text-[10px] text-accent uppercase tracking-widest">Initializing Mesh...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="relative aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/5 group">
       <video
-        // The "Key Hack": Forces React to recreate the video tag when the URL changes.
+        // 3. THE 'KEY HACK': 
+        // Forces React to destroy and recreate the video element when the URL changes.
         key={videoUrl} 
         ref={videoRef}
         src={videoUrl}
-        className="w-full h-full rounded-lg"
+        className="w-full h-full"
         controls
         autoPlay
         playsInline
-        preload="auto"
+        preload="metadata" // 4. METADATA GUARD: Prevents aggressive buffering of invalid sources
         crossOrigin="anonymous"
         onError={(e) => {
           const error = e.currentTarget.error;
-          // Defensive check to avoid logging empty/undefined error objects
+          // Only log if we actually have a source we expected to work
           if (videoUrl && videoUrl !== 'undefined') {
-            console.error('Mesh Sync Failed:', {
-              message: error?.message || 'Unknown Media Error',
-              code: error?.code || 'N/A',
-              url: videoUrl
-            });
+            console.error('Mesh Sync Failed:', error?.message || 'Unknown Media Error', `(Code: ${error?.code})`);
           }
         }}
       >
