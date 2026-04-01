@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
@@ -27,7 +28,6 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
     
     const targetTime = externalState.currentTime;
     
-    // Safety check for finite value
     if (isFinite(targetTime) && Math.abs(videoRef.current.currentTime - targetTime) > 1) {
       videoRef.current.currentTime = targetTime;
     }
@@ -55,6 +55,7 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
     let animationId: number;
 
     const drawFrame = () => {
+      // Optimization: Only draw and request frames if playing
       if (!video.paused && !video.ended) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
@@ -66,8 +67,8 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
         for (let i = 0; i < canvas.height; i += 4) {
           ctx.fillRect(0, i, canvas.width, 1);
         }
+        animationId = requestAnimationFrame(drawFrame);
       }
-      animationId = requestAnimationFrame(drawFrame);
     };
 
     const handlePlay = () => {
@@ -75,7 +76,10 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
       drawFrame();
     };
 
-    const handlePause = () => setIsPlaying(false);
+    const handlePause = () => {
+      setIsPlaying(false);
+      if (animationId) cancelAnimationFrame(animationId);
+    };
     
     const handleTimeUpdate = () => {
       if (video.duration && isFinite(video.duration) && video.duration > 0) {
@@ -88,7 +92,7 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
     video.addEventListener('timeupdate', handleTimeUpdate);
 
     return () => {
-      cancelAnimationFrame(animationId);
+      if (animationId) cancelAnimationFrame(animationId);
       video.removeEventListener('play', handlePlay);
       video.removeEventListener('pause', handlePause);
       video.removeEventListener('timeupdate', handleTimeUpdate);

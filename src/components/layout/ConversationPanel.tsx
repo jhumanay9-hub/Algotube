@@ -32,6 +32,12 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
   const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
   const publicScrollRef = useRef<HTMLDivElement>(null);
+  
+  // Use a ref for playerState to prevent Effect re-runs every second
+  const playerStateRef = useRef(playerState);
+  useEffect(() => {
+    playerStateRef.current = playerState;
+  }, [playerState]);
 
   const scrollToBottom = (ref: React.RefObject<HTMLDivElement>) => {
     if (ref.current) {
@@ -70,46 +76,59 @@ export default function ConversationPanel({ videoId, onSyncState, playerState }:
     loadPublicMessages();
     loadRooms();
 
+    // Consolidated Polling: 5 seconds to reduce memory pressure on 4GB hardware
     const interval = setInterval(() => {
       loadPublicMessages();
+      
       if (currentRoom) {
-        fetch(`/api/chat/messages?roomId=${currentRoom.id}`).then(r => r.json()).then(msgs => {
-          if (Array.isArray(msgs)) {
-            setMessages(msgs);
-            scrollToBottom(scrollRef);
-          }
-        });
-        
-        fetch(`/api/chat/members?roomId=${currentRoom.id}`).then(r => r.json()).then(mems => {
-          if (Array.isArray(mems)) setMembers(mems);
-        });
-
-        if (activeTab === 'private' && user) {
-          fetch(`/api/watch-party?roomId=${currentRoom.id}`).then(r => r.json()).then(syncData => {
-            if (syncData && syncData.leaderId !== user.uid && onSyncState) {
-              onSyncState({ 
-                currentTime: syncData.currentTime, 
-                isPaused: syncData.isPaused === 1 || syncData.isPaused === true 
-              });
-            } else if ((!syncData || syncData.leaderId === user.uid) && playerState) {
-              fetch('/api/watch-party', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  roomId: currentRoom.id,
-                  leaderId: user.uid,
-                  currentTime: playerState.currentTime,
-                  isPaused: playerState.isPaused
-                })
-              });
+        // Fetch current room messages
+        fetch(`/api/chat/messages?roomId=${currentRoom.id}`)
+          .then(r => r.json())
+          .then(msgs => {
+            if (Array.isArray(msgs)) {
+              setMessages(msgs);
+              scrollToBottom(scrollRef);
             }
           });
+        
+        // Fetch active members
+        fetch(`/api/chat/members?roomId=${currentRoom.id}`)
+          .then(r => r.json())
+          .then(mems => {
+            if (Array.isArray(mems)) setMembers(mems);
+          });
+
+        // Sync Watch Party State
+        if (activeTab === 'private' && user) {
+          fetch(`/api/watch-party?roomId=${currentRoom.id}`)
+            .then(r => r.json())
+            .then(syncData => {
+              const latestPlayer = playerStateRef.current;
+              
+              if (syncData && syncData.leaderId !== user.uid && onSyncState) {
+                onSyncState({ 
+                  currentTime: syncData.currentTime, 
+                  isPaused: syncData.isPaused === 1 || syncData.isPaused === true 
+                });
+              } else if ((!syncData || syncData.leaderId === user.uid) && latestPlayer) {
+                fetch('/api/watch-party', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    roomId: currentRoom.id,
+                    leaderId: user.uid,
+                    currentTime: latestPlayer.currentTime,
+                    isPaused: latestPlayer.isPaused
+                  })
+                });
+              }
+            });
         }
       }
-    }, 2000); 
+    }, 5000); 
 
     return () => clearInterval(interval);
-  }, [videoId, currentRoom, user, activeTab, playerState, onSyncState, loadPublicMessages, loadRooms]);
+  }, [videoId, currentRoom?.id, user?.uid, activeTab, onSyncState, loadPublicMessages, loadRooms]);
 
   useEffect(() => {
     scrollToBottom(activeTab === 'public' ? publicScrollRef : scrollRef);
@@ -277,7 +296,7 @@ function MessageInput({ onSend, value, onChange, disabled, user }: any) {
         disabled={!value.trim() || disabled}
         onClick={onSend}
       >
-        {disabled ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} className="size-4" />}
+        {disabled ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
       </Button>
     </div>
   );
