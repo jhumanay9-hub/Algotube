@@ -10,12 +10,18 @@ interface CanvasVideoPlayerProps {
 }
 
 /**
- * CanvasVideoPlayer - Standard HTML5 Refactor
- * Simplified to resolve persistent CORS Code 4 errors by removing canvas drawing.
- * Retains Watch Party synchronization and CORS headers for stability.
+ * CanvasVideoPlayer - Standard HTML5 Implementation
+ * Uses the <source> tag with explicit MIME types for pre-loader stability.
+ * Features a Local Test URL for hardware diagnostic purposes.
  */
+const STABLE_FALLBACK_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+
 const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, externalState }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  
+  // Local test toggle (Switch this to TRUE to debug environment playback)
+  const USE_TEST_URL = false;
+  const videoUrl = USE_TEST_URL ? STABLE_FALLBACK_URL : (src || "");
 
   // Sync with external state (Watch Party / SQL Mesh Sync)
   useEffect(() => {
@@ -48,7 +54,6 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
     <div className="relative aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/5">
       <video
         ref={videoRef}
-        {...(src ? { src } : {})}
         className="w-full h-full rounded-lg shadow-xl"
         controls
         autoPlay
@@ -56,13 +61,17 @@ const CanvasVideoPlayer = forwardRef<any, CanvasVideoPlayerProps>(({ src, extern
         preload="auto"
         crossOrigin="anonymous" // Essential for cross-origin media handshake
         onError={(e) => {
-          // Log specific browser error for SQL Mesh diagnostics
-          console.error('Mesh Sync Failed:', e.currentTarget.error?.message);
+          // Log specific browser error code (1-4) for SQL Mesh diagnostics
+          console.error('Mesh Sync Failed:', e.currentTarget.error?.message, `(Code: ${e.currentTarget.error?.code})`);
         }}
-      />
+      >
+        {videoUrl && (
+          <source src={videoUrl} type="video/mp4" />
+        )}
+      </video>
       
       {/* Loading Overlay if Source is Missing */}
-      {!src && (
+      {!videoUrl && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-none">
           <div className="text-[10px] font-code text-accent uppercase tracking-widest animate-pulse">
             Awaiting Registry Data...

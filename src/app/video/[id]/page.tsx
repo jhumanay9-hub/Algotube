@@ -59,9 +59,14 @@ export default function VideoDetailPage() {
       
       // Sanitization guard for frontend stability
       if (found) {
-        if (!found.url || found.url.includes('placeholder.com') || found.url.includes('undefined')) {
-          found.url = STABLE_FALLBACK_URL;
+        // Trim whitespace and validate URL
+        let videoUrl = (found.url || "").trim();
+        
+        if (!videoUrl || videoUrl.includes('placeholder.com') || videoUrl.includes('undefined')) {
+          videoUrl = STABLE_FALLBACK_URL;
         }
+        
+        found.url = videoUrl;
         console.log("Mesh Sync: Passing sanitized video URL:", found.url);
       }
 
