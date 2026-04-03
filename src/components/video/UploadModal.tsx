@@ -9,7 +9,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Upload, Loader2, FileVideo, AlertCircle } from 'lucide-react';
-import { useUser } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 
 interface UploadModalProps {
@@ -19,9 +18,8 @@ interface UploadModalProps {
 }
 
 /**
- * UploadModal - Refactored for EXACT Turso SQL Schema
- * Uses title, description, url, author_name.
- * Optimized for 4GB RAM: Releases file reference early.
+ * UploadModal - Configured for Native XAMPP PHP Uploads
+ * Transmits physical MP4/WebM binaries directly to Apache.
  */
 export function UploadModal({ isOpen, onClose }: UploadModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -31,7 +29,8 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   
-  const { user } = useUser();
+  // Mock User for PHP Backend foreign keys
+  const user = { uid: "1", displayName: "admin", email: "admin@algotube.local" };
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -49,39 +48,45 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
     setUploadProgress(0);
     setUploadError(null);
     
-    const authorName = user.displayName || user.email || 'Anonymous';
-    const capturedTitle = title;
-    const capturedDescription = description;
-    
-    // Clear state early to save RAM on 4GB devices
+    // Create physical FormData payload
+    const formData = new FormData();
+    formData.append('title', title);
+    formData.append('description', description);
+    formData.append('user_id', user.uid);
+    formData.append('video', selectedFile);
+
+    // Clear state early to save RAM on 4GB devices during heavy chunks
+    const fileReferenceToKeep = selectedFile;
     setSelectedFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
 
     try {
-      // Simulate broadcast progress
-      for (let i = 0; i <= 100; i += 20) {
-        setUploadProgress(i);
-        await new Promise(r => setTimeout(r, 150));
-      }
-
-      // Exact key mapping for Turso: title, description, url, author_name
-      // Backend automatically swaps 'placeholder.com' for the stable Google-hosted BigBuckBunny.mp4
-      const videoData = {
-        title: capturedTitle,
-        description: capturedDescription,
-        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", 
-        author_name: authorName
+      // Setup XHR to track real file upload progress
+      const xhr = new XMLHttpRequest();
+      
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percentComplete = Math.round((event.loaded / event.total) * 100);
+          setUploadProgress(percentComplete);
+        }
       };
 
-      const tursoRes = await fetch('/api/videos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(videoData)
+      const uploadPromise = new Promise((resolve, reject) => {
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText));
+          } else {
+            reject(new Error("Server responded with status " + xhr.status));
+          }
+        };
+        xhr.onerror = () => reject(new Error("XHR Network Error"));
+        xhr.open('POST', '/api/upload_video.php', true);
+        xhr.send(formData);
       });
 
-      if (!tursoRes.ok) throw new Error('Turso SQL Mesh Write Rejected');
+      await uploadPromise;
 
-      toast({ title: "Broadcast Successful", description: "Transmission registered in SQL Mesh." });
+      toast({ title: "Broadcast Successful", description: "Transmission physical binary stored." });
       
       onClose();
       setIsProcessing(false);
@@ -96,7 +101,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !isProcessing && !open && onClose()}>
-      <DialogContent className="sm:max-w-[500px] glass-panel border-white/10 rounded-3xl p-0 overflow-hidden shadow-2xl">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto glass-panel border-white/10 rounded-3xl p-0 shadow-2xl custom-scrollbar">
         <div className="absolute top-0 left-0 w-full h-1 bg-accent/20">
           <div className="h-full bg-accent transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
         </div>

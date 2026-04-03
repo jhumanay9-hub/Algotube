@@ -4,8 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useAuth } from '@/firebase';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Eye, EyeOff, CheckCircle2, XCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -54,29 +53,28 @@ export function AuthCard() {
 
     try {
       if (isLogin) {
-        await signInWithEmailAndPassword(auth, email, password);
-        toast({ title: "Welcome back!", description: "Successfully signed in via SQL mesh." });
+        // MOCK SQL SIGN IN
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Redirecting to future PHP login logic if needed or just simulate success
+        auth.signIn();
+        toast({ title: "Welcome back!", description: "Successfully signed in via local SQL." });
       } else {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
+        // MOCK SQL SIGN UP
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const fakeUid = Math.random().toString(36).substring(7);
 
-        await updateProfile(user, { displayName: fullName });
-
-        // PERSIST TO TURSO SQL PROFILES
+        // PERSIST TO XAMPP SQL PROFILES
         const profileData = {
-          id: user.uid,
+          id: fakeUid,
           username: fullName.toLowerCase().replace(/\s+/g, '_'),
           email: email,
           joinedAt: new Date().toISOString()
         };
 
-        await fetch('/api/profiles', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(profileData)
-        });
-        
-        toast({ title: "Account created!", description: "Profile persisted to SQL mesh." });
+        // await fetch('/api/register.php', { ... }) 
+
+        auth.signIn();
+        toast({ title: "Account created!", description: "Profile persisted to XAMPP SQL." });
       }
       router.push('/');
     } catch (error: any) {

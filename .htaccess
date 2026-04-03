@@ -1,0 +1,11 @@
+RewriteEngine On
+RewriteBase /
+
+# Force all requests to index.html for Next.js SPA routing
+# But allow actual files and directories to be served normally
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.html [L]
+
+# Optional: Ensure /api requests are not redirected
+RewriteCond %{REQUEST_URI} !^/api/

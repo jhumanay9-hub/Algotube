@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import VideoCard from '@/components/video-card/VideoCard';
-import { useUser } from '@/firebase';
+import { useUser } from '@/context/AuthContext';
 import { ThumbsUp, Heart, Loader2, DatabaseZap } from 'lucide-react';
 
 export default function LikedVideosPage() {

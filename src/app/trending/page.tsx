@@ -9,6 +9,15 @@ import { calculateHotScore } from '@/lib/ranking';
 import { Button } from '@/components/ui/button';
 
 const PAGE_SIZE = 12;
+const getMediaUrl = (path: string | null) => {
+  if (!path) return '';
+  if (path.startsWith('http')) return path;
+  const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+  if (cleanPath.startsWith('Algotube')) {
+    return `/${cleanPath}`;
+  }
+  return `/${cleanPath}`;
+};
 
 /**
  * TrendingPage - SQL Time-Decay Ranking
@@ -23,9 +32,17 @@ export default function TrendingPage() {
     async function loadData() {
       setIsLoading(true);
       try {
-        const res = await fetch(`/api/videos?limit=100`);
+        const res = await fetch(`/api/get_feed.php`);
         const data = await res.json();
-        setVideos(Array.isArray(data) ? data : []);
+        
+        // Map and normalize paths for Trending
+        const normalizedData = Array.isArray(data) ? data.map(v => ({
+          ...v,
+          url: getMediaUrl(v.file_path),
+          thumbnail: getMediaUrl(v.thumbnail_path)
+        })) : [];
+        
+        setVideos(normalizedData);
       } catch (e) {
         console.error('Failed to sync SQL registry for Trending.');
       } finally {
@@ -54,7 +71,7 @@ export default function TrendingPage() {
   }, [trendingVideos, visibleCount]);
 
   const handleLoadMore = () => {
-    setVisibleCount(prev => prev + PAGE_SIZE);
+    setVisibleCount((prev: number) => prev + PAGE_SIZE);
   };
 
   return (

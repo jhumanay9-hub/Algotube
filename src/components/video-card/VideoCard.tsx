@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -12,21 +11,36 @@ interface VideoCardProps {
     description?: string;
     url: string;
     author_name: string;
-    likesCount?: number;
-    dislikesCount?: number;
+    likes?: number;
+    dislikes?: number;
   };
 }
 
-/**
- * VideoCard - Optimized SQL Transmission Preview
- * Uses the synchronized SQL Schema keys and displays engagement counters.
- */
-export default function VideoCard({ video }: VideoCardProps) {
+const VideoCard = React.memo(({ video }: VideoCardProps) => {
+  // Random seed for thumbnail consistency
   const thumbnail = `https://picsum.photos/seed/${video.id}/600/400`;
+
+  // Only attempt to ping the detail API if the ID is valid
+  const handleMouseEnter = () => {
+    if (video.id) {
+      fetch(`/api/video_detail.php?id=${video.id}`).catch(() => {
+        // Silently fail to avoid console clutter on server-side hiccups
+      });
+    }
+  };
 
   return (
     <div className="glass-card rounded-2xl overflow-hidden h-full flex flex-col group animate-in fade-in duration-500">
-      <Link href={`/video/${video.id}`} className="block relative aspect-video overflow-hidden">
+      
+      {/* FIXED: Using Link with 'prefetch={false}' is safer for Static Exports on InfinityFree.
+        It prevents the background 404 errors you saw in your logs.
+      */}
+      <Link 
+        href={`/video/${video.id}`}
+        prefetch={false} 
+        onMouseEnter={handleMouseEnter}
+        className="block relative aspect-video overflow-hidden cursor-pointer"
+      >
         <img 
           src={thumbnail} 
           alt={video.title} 
@@ -45,8 +59,9 @@ export default function VideoCard({ video }: VideoCardProps) {
             {video.author_name?.[0]?.toUpperCase() || 'A'}
           </div>
           <div className="flex-1 min-w-0">
-            <Link href={`/video/${video.id}`}>
-              <h3 className="font-headline font-bold text-sm text-foreground group-hover:text-accent transition-colors line-clamp-2 leading-tight">
+            {/* FIXED: Using Link here as well to maintain SPA behavior */}
+            <Link href={`/video/${video.id}`} prefetch={false}>
+              <h3 className="font-headline font-bold text-sm text-foreground group-hover:text-accent transition-colors line-clamp-2 leading-tight cursor-pointer">
                 {video.title}
               </h3>
             </Link>
@@ -61,14 +76,17 @@ export default function VideoCard({ video }: VideoCardProps) {
 
         <div className="mt-auto flex items-center gap-4 text-[9px] text-muted-foreground font-code uppercase tracking-tighter">
           <span className="flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded border border-white/5">
-            <ThumbsUp size={10} className="text-accent" /> {video.likesCount || 0}
+            <ThumbsUp size={10} className="text-accent" /> {video.likes || 0}
           </span>
           <span className="flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded border border-white/5">
-            <ThumbsDown size={10} className="text-red-500" /> {video.dislikesCount || 0}
+            <ThumbsDown size={10} className="text-red-500" /> {video.dislikes || 0}
           </span>
           <span className="ml-auto opacity-50">SYNCED</span>
         </div>
       </div>
     </div>
   );
-}
+});
+
+VideoCard.displayName = 'VideoCard';
+export default VideoCard;

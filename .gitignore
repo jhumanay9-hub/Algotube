@@ -42,4 +42,15 @@ next-env.d.ts
 
 # firebase
 firebase-debug.log
-firestore-debug.log
+firestore-debug.log   
+this is what is in notepad
+# local uploads
+uploads/
+
+# local/dev tools
+.agents/
+.idx/
+.qwen/
+
+# editor
+.vscode/

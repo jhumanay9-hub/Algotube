@@ -5,7 +5,7 @@ import { Send, MessageSquare, Loader2, Lock, DatabaseZap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
-import { useUser } from '@/firebase';
+import { useUser } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
 interface CommunityPanelProps {
@@ -50,8 +50,8 @@ export default function CommunityPanel({ videoId }: CommunityPanelProps) {
     const commentData = {
       videoId,
       userId: user.uid,
-      userName: user.displayName || "Explorer",
-      userAvatar: user.photoURL || `https://picsum.photos/seed/${user.uid}/40/40`,
+      userName: user.name || "Explorer",
+      userAvatar: `https://picsum.photos/seed/${user.uid}/40/40`,
       content: newComment.trim(),
       createdAt: new Date().toISOString()
     };

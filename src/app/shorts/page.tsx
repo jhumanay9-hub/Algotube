@@ -6,7 +6,6 @@ import Sidebar from '@/components/layout/Sidebar';
 import ShortsPlayer from '@/components/video/ShortsPlayer';
 import { Zap, Loader2, Plus, RefreshCw, DatabaseZap } from 'lucide-react';
 import { UploadModal } from '@/components/video/UploadModal';
-import { useUser } from '@/firebase';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -14,16 +13,26 @@ export default function ShortsPage() {
   const [videos, setVideos] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const { user } = useUser();
+  
+  // Replaced Firebase Auth with local Guest placeholder so Turbopack can build
+  const user = { name: 'Guest', id: 1 };
 
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/videos?limit=100');
+      const res = await fetch('/api/get_feed.php');
       const data = await res.json();
-      setVideos(Array.isArray(data) ? data : []);
+      
+      // Hydrate shorts UI structurally with Local MySQL PHP schema variables
+      const mappedData = Array.isArray(data) ? data.map(v => ({
+        ...v,
+        url: v.file_path,
+        creator: v.author_name || 'Local Upload',
+        thumbnail: v.thumbnail_path
+      })) : [];
+      setVideos(mappedData);
     } catch (e) {
-      console.error('SQL Mesh Sync failed for Shorts.');
+      console.error('XAMPP MySQL Sync failed for Shorts.');
     } finally {
       setIsLoading(false);
     }

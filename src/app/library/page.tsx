@@ -1,52 +1,43 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import VideoCard from '@/components/video-card/VideoCard';
-import { useUser } from '@/firebase';
 import { Layout, Clock, Heart, Loader2, ChevronRight, DatabaseZap } from 'lucide-react';
-import { getTursoVideos, getTursoUserSocialData } from '@/app/actions/turso-actions';
 import Link from 'next/link';
 
 export default function LibraryPage() {
-  const { user, isUserLoading } = useUser();
-  const [historyIds, setHistoryIds] = useState<string[]>([]);
-  const [likedIds, setLikedIds] = useState<string[]>([]);
   const [allVideos, setAllVideos] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
-      if (!user) {
-        setIsLoading(false);
-        return;
-      }
       setIsLoading(true);
       try {
-        const [socialData, vids] = await Promise.all([
-          getTursoUserSocialData(user.uid),
-          getTursoVideos()
-        ]);
-        setHistoryIds(socialData.historyVideoIds);
-        setLikedIds(socialData.likedVideoIds);
-        setAllVideos(vids);
+        const res = await fetch(`/api/get_videos.php`);
+        const data = await res.json();
+        
+        // Map PHP schema to expected VideoCard schema
+        const mappedData = Array.isArray(data) ? data.map(v => ({
+          ...v,
+          url: v.file_path,
+          author_name: 'Local Upload',
+          description: `Uploaded on ${v.upload_date}`
+        })) : [];
+        
+        setAllVideos(mappedData);
       } catch (e) {
-        console.error('Turso Mesh Sync failed for Library.');
+        console.error('MySQL Sync failed for Library.');
       } finally {
         setIsLoading(false);
       }
     }
     loadData();
-  }, [user]);
+  }, []);
 
-  const historyVideos = useMemo(() => {
-    return historyIds.map(id => allVideos.find(v => v.id === id)).filter(Boolean).slice(0, 4);
-  }, [historyIds, allVideos]);
-
-  const likedVideos = useMemo(() => {
-    return likedIds.map(id => allVideos.find(v => v.id === id)).filter(Boolean).slice(0, 4);
-  }, [likedIds, allVideos]);
+  const historyVideos = allVideos.slice(0, 4);
+  const likedVideos = allVideos.slice(4, 8);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -61,27 +52,12 @@ export default function LibraryPage() {
               <Layout className="text-accent" size={24} />
               <h2 className="text-xl font-headline font-bold">Your Library</h2>
             </div>
-            {user && (
-              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-[10px] text-accent font-code">
-                <DatabaseZap size={12} /> TURSO SQL MESH ACTIVE
-              </div>
-            )}
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-[10px] text-accent font-code">
+              <DatabaseZap size={12} /> MYSQL ACTIVE
+            </div>
           </div>
 
-          {!user && !isUserLoading ? (
-            <div className="flex flex-col items-center justify-center h-[60vh] text-muted-foreground text-center animate-in fade-in duration-500">
-              <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-6">
-                <Layout size={40} className="text-white/20" />
-              </div>
-              <h3 className="text-xl font-headline font-bold text-white mb-2">Build your collection</h3>
-              <p className="max-w-xs mb-8">Sign in to track your history and liked transmissions on the SQL mesh.</p>
-              <Link href="/auth">
-                <button className="px-8 py-3 rounded-xl bg-accent text-background font-headline font-bold hover:neon-glow transition-all">
-                  SIGN IN
-                </button>
-              </Link>
-            </div>
-          ) : isLoading || isUserLoading ? (
+          {isLoading ? (
             <div className="space-y-12">
                {[1, 2].map(section => (
                  <div key={section} className="space-y-4">
@@ -111,7 +87,7 @@ export default function LibraryPage() {
                   </div>
                 ) : (
                   <div className="p-12 glass-panel rounded-3xl text-center border-dashed border-white/5 opacity-50">
-                    <p className="text-sm text-muted-foreground font-body">No recent transmissions on the SQL mesh.</p>
+                    <p className="text-sm text-muted-foreground font-body">No recent transmissions on MySQL.</p>
                   </div>
                 )}
               </section>

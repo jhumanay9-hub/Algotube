@@ -2,10 +2,9 @@
 "use client";
 
 import React from 'react';
-import { Home, TrendingUp, Users, Clock, ThumbsUp, Layers, Settings, HelpCircle, LogIn, LogOut, Zap, Layout } from 'lucide-react';
+import { Home, TrendingUp, Users, Clock, ThumbsUp, Layers, Settings, HelpCircle, LogIn, LogOut, Zap, Layout, Upload, UserCircle } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useUser, useAuth } from '@/firebase';
 import { cn } from '@/lib/utils';
 import { SheetClose } from '@/components/ui/sheet';
 
@@ -27,14 +26,15 @@ interface SidebarProps {
   isMobile?: boolean;
 }
 
-export default function Sidebar({ isMobile }: SidebarProps) {
+const Sidebar = React.memo(({ isMobile }: SidebarProps) => {
   const pathname = usePathname();
   const router = useRouter();
-  const { user } = useUser();
-  const auth = useAuth();
+  
+  // Use a mocked user for now to avoid breaking the build until PHP auth is connected.
+  const user = { name: 'Guest' };
 
   const handleLogout = async () => {
-    await auth.signOut();
+    // Future PHP session wipe logic goes here
     router.push('/trending');
   };
 
@@ -116,6 +116,8 @@ export default function Sidebar({ isMobile }: SidebarProps) {
 
       <div className="mt-auto">
         <div className="space-y-1">
+          <SidebarItem icon={Upload} label="Upload" href="/upload" />
+          <SidebarItem icon={UserCircle} label="Profile" href="/profile" />
           <SidebarItem icon={Settings} label="Settings" href="/settings" />
           <SidebarItem icon={HelpCircle} label="Help" href="/help" />
         </div>
@@ -135,4 +137,7 @@ export default function Sidebar({ isMobile }: SidebarProps) {
       `}</style>
     </aside>
   );
-}
+});
+
+Sidebar.displayName = 'Sidebar';
+export default Sidebar;

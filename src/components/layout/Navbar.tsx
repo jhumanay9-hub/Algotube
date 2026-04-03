@@ -5,10 +5,8 @@ import React, { useState, useEffect } from 'react';
 import { Search, Bell, Upload, Shield, LogOut, Menu, UserCircle, Loader2, Zap } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { getB2Videos } from '@/app/actions/b2-store';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useUser, useAuth } from '@/firebase';
 import { UploadModal } from '@/components/video/UploadModal';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -24,23 +22,41 @@ export default function Navbar() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
 
-  const { user } = useUser();
-  const auth = useAuth();
+  // Mocked user object since Firebase Auth has been removed
+  const user = { 
+    uid: "1", 
+    displayName: "admin", 
+    email: "admin@algotube.local",
+    avatar_url: "/uploads/avatars/default.png"
+  };
   const router = useRouter();
 
   const { results, isSearching } = useSearch(searchQuery, allVideos);
 
   useEffect(() => {
     async function load() {
-      const vids = await getB2Videos();
-      setAllVideos(vids);
+      try {
+        const res = await fetch('/api/get_feed.php');
+        const data = await res.json();
+        
+        // Map XAMPP payload to the older Video schema structure the components expect
+        const mappedData = Array.isArray(data) ? data.map(v => ({
+          ...v,
+          url: v.file_path,
+          creator: v.author_name || 'Local Upload',
+          thumbnail: v.thumbnail_path
+        })) : [];
+        setAllVideos(mappedData);
+      } catch(e) {
+        console.error("XAMPP Sync Error in Navbar Navbar Search:", e);
+      }
     }
     load();
   }, []);
 
   const handleLogout = async () => {
-    await auth.signOut();
-    router.push('/trending');
+    // Auth is mocked, practically a no-op
+    router.push('/');
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -153,7 +169,7 @@ export default function Navbar() {
             >
               {user ? (
                 <Avatar className="w-full h-full rounded-[inherit]">
-                  <AvatarImage src={user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`} />
+                  <AvatarImage src={user.avatar_url} />
                   <AvatarFallback>{user.displayName?.[0] || user.email?.[0]}</AvatarFallback>
                 </Avatar>
               ) : (

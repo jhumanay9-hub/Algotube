@@ -6,10 +6,23 @@ import Sidebar from '@/components/layout/Sidebar';
 import VideoCard from '@/components/video-card/VideoCard';
 import { TrendingUp, Sparkles, Heart, DatabaseZap, Loader2 } from 'lucide-react';
 
+const getMediaUrl = (path: string | null) => {
+  if (!path) return '';
+  if (path.startsWith('http')) return path;
+  
+  const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+  
+  // If the path already has "Algotube" in it, only prepend /
+  if (cleanPath.startsWith('Algotube')) {
+    return `/${cleanPath}`;
+  }
+  
+  return `/${cleanPath}`;
+};
+
 /**
- * AlgoTube Home - SQL Discovery Interface
- * Fetches transmission metadata from the Turso SQL mesh.
- * Refactored for exact schema: id, title, description, url, author_name.
+ * AlgoTube Home - Video Discovery Interface
+ * Fetches videos from the local XAMPP PHP backend.
  */
 export default function Home() {
   const [videos, setVideos] = useState<any[]>([]);
@@ -19,11 +32,21 @@ export default function Home() {
     async function loadData() {
       setIsLoading(true);
       try {
-        const res = await fetch(`/api/videos?limit=50`);
+        const res = await fetch(`/api/get_feed.php`);
         const data = await res.json();
-        setVideos(Array.isArray(data) ? data : []);
+        
+        // Map PHP schema to expected VideoCard schema using centralized normalization
+        const mappedData = Array.isArray(data) ? data.map(v => ({
+          ...v,
+          url: getMediaUrl(v.file_path),
+          author_name: v.author_name || 'Local Upload',
+          description: v.description || `Uploaded on ${v.upload_date}`,
+          thumbnail: getMediaUrl(v.thumbnail_path)
+        })) : [];
+        
+        setVideos(mappedData);
       } catch (e) {
-        console.error('Turso Mesh Sync Error:', e);
+        console.error('XAMPP MySQL Sync Error:', e);
       } finally {
         setIsLoading(false);
       }
@@ -46,16 +69,16 @@ export default function Home() {
             <div className="relative z-10 max-w-2xl">
               <div className="flex items-center gap-2 mb-4 text-accent">
                 <Sparkles size={20} />
-                <span className="font-code text-xs tracking-widest uppercase">Turso DB: Operational</span>
+                <span className="font-code text-xs tracking-widest uppercase">Backend: Operational</span>
               </div>
               <h1 className="text-5xl font-headline font-bold mb-4 bg-gradient-to-r from-white via-white to-accent bg-clip-text text-transparent leading-tight">
-                Next Gen <br/>SQL Mesh discovery
+                Native XAMPP <br/>Video Delivery
               </h1>
               <p className="text-muted-foreground font-body leading-relaxed mb-8 text-lg">
-                Powered by Turso. High-performance transmission metadata served from the global SQL edge nodes.
+                Powered by PHP & MySQL. Delivering local media bypassing Next.js payload limits and CORS restrictions.
               </p>
               <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-[9px] text-accent font-code w-fit">
-                <DatabaseZap size={10} /> TURSO SQL MESH ACTIVE
+                <DatabaseZap size={10} /> MYSQL DATABASE ACTIVE
               </div>
             </div>
           </div>
@@ -63,14 +86,14 @@ export default function Home() {
           <div className="mb-6 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <TrendingUp className="text-accent" size={24} />
-              <h2 className="text-xl font-headline font-bold">Latest Transmissions</h2>
+              <h2 className="text-xl font-headline font-bold">Latest Uploads</h2>
             </div>
           </div>
 
           {isLoading ? (
              <div className="flex flex-col items-center justify-center py-24 gap-4 opacity-50">
                <Loader2 className="animate-spin text-accent" size={40} />
-               <p className="font-code text-xs tracking-widest uppercase">Querying Turso Nodes...</p>
+               <p className="font-code text-xs tracking-widest uppercase">Querying Local Server...</p>
              </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-12">
@@ -80,7 +103,7 @@ export default function Home() {
                 ))
               ) : (
                 <div className="col-span-full py-12 text-center opacity-30">
-                  <p className="font-code text-xs uppercase tracking-widest">No transmissions detected in SQL registry</p>
+                  <p className="font-code text-xs uppercase tracking-widest">No transmissions detected in MySQL registry</p>
                 </div>
               )}
             </div>
