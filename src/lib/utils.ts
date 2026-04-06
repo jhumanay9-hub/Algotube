@@ -1,17 +1,29 @@
-import { clsx, type ClassValue } from "clsx"
-import { twMerge } from "tailwind-merge"
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
+  return twMerge(clsx(inputs));
 }
 
-const XAMPP_BASE_URL = '/';
+// Detect environment from hostname at runtime (client-side)
+const isLocalhost =
+  typeof window !== "undefined" && window.location.hostname === "localhost";
 
-export function getMediaUrl(path: string | null | undefined) {
-  if (!path) return '';
-  if (path.startsWith('http')) return path;
-  const cleanPath = path.startsWith('/') ? path.substring(1) : path;
-  
-  // Normalized for InfinityFree where files are in the root
-  return `/${cleanPath}`;
+// Image/Uploads Base URL - Points to appropriate uploads directory
+const IMAGE_BASE = isLocalhost
+  ? "http://localhost/Algotube/uploads"
+  : "http://algotube.gt.tc/uploads";
+
+export function getMediaUrl(path: string | null | undefined | Blob): string {
+  if (!path || typeof path === "object") return "";
+  if (path.startsWith("http")) return path;
+
+  const cleanPath = path.startsWith("/") ? path.substring(1) : path;
+
+  // If path already includes 'uploads' or 'Algotube', adjust accordingly
+  if (cleanPath.startsWith("Algotube/uploads/")) {
+    return `${isLocalhost ? "http://localhost" : "http://algotube.gt.tc"}/${cleanPath}`;
+  }
+
+  return `${IMAGE_BASE}/${cleanPath}`;
 }

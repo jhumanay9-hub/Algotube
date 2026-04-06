@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { getApiUrl } from "@/lib/config";
 import { useParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import Sidebar from "@/components/layout/Sidebar";
@@ -23,7 +24,7 @@ export default function ChannelPageClient() {
     async function loadData() {
       setIsLoading(true);
       try {
-        const res = await fetch(`/api/get_videos.php`);
+        const res = await fetch(getApiUrl("get_videos.php"));
         const data = await res.json();
 
         // Map PHP schema to expected VideoCard schema

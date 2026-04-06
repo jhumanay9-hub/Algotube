@@ -1,29 +1,38 @@
 <?php
+// Error reporting for development
 ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-header('Access-Control-Allow-Origin: http://localhost:9002');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
-header('Content-Type: application/json');
+// CORS Headers
+if (!headers_sent()) {
+    header('Access-Control-Allow-Origin: http://localhost:9002');
+    header('Access-Control-Allow-Methods: POST, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type, Authorization, Accept');
+    header('Access-Control-Allow-Credentials: true');
+    header('Content-Type: application/json');
+}
 
+// Handle preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
+    http_response_code(204);
     exit();
 }
 
-require_once 'db.php';
+require_once __DIR__ . '/../config/db.php';
 
 if (!isset($_FILES['video']) || empty($_FILES['video']['name'])) {
     http_response_code(400);
-    die(json_encode(["error" => "No file received"]));
+    echo json_encode(["error" => "No file received"]);
+    exit();
 }
 
 $uploadDirectory = dirname(__DIR__) . '/uploads/videos';
 if (!is_dir($uploadDirectory)) {
     if (!mkdir($uploadDirectory, 0777, true)) {
         http_response_code(500);
-        die(json_encode(["error" => "Upload directory missing"]));
+        echo json_encode(["error" => "Upload directory missing"]);
+        exit();
     }
 }
 
@@ -56,12 +65,23 @@ if (move_uploaded_file($tmp_name, $destination)) {
         ]);
         exit();
     } catch (\PDOException $e) {
-        unlink($destination);
+        if (file_exists($destination)) {
+            unlink($destination);
+        }
         http_response_code(500);
-        die(json_encode(["error" => "Database insertion failed"]));
+        echo json_encode([
+            "error" => "Database insertion failed",
+            "details" => $e->getMessage()
+        ]);
+        exit();
     }
 } else {
     http_response_code(500);
-    die(json_encode(["error" => "Failed to move file to upload directory"]));
+    echo json_encode([
+        "error" => "Failed to move file to upload directory",
+        "tmp_name" => $tmp_name,
+        "destination" => $destination
+    ]);
+    exit();
 }
 ?>

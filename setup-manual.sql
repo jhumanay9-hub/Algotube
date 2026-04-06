@@ -1,3 +1,6 @@
+-- Algotube Database Setup
+-- Run this in phpMyAdmin or via: mysql -u root < setup-manual.sql
+
 CREATE DATABASE IF NOT EXISTS algotube;
 USE algotube;
 
@@ -11,7 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Videos Table
+-- Videos Table (with likes/dislikes columns)
 CREATE TABLE IF NOT EXISTS videos (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -37,32 +40,6 @@ CREATE TABLE IF NOT EXISTS comments (
     FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
-
--- Private Rooms Table (1-on-1 Social Layer)
-CREATE TABLE IF NOT EXISTS private_rooms (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    room_code VARCHAR(100) NOT NULL UNIQUE,
-    user_a INT NOT NULL,
-    user_b INT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_a) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_b) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- Private Messages Table (Social Layer Hub)
-CREATE TABLE IF NOT EXISTS private_messages (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    room_code VARCHAR(100) NOT NULL,
-    user_id INT NOT NULL,
-    content TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- Insert a Mock User so uploads don't fail Foreign Key constraints
-INSERT INTO users (username, email, password_hash)
-VALUES ('admin', 'admin@algotube.local', 'mock_hash_for_testing_only')
-ON DUPLICATE KEY UPDATE id=id;
 
 -- Watch Parties Table
 CREATE TABLE IF NOT EXISTS watch_parties (
@@ -90,7 +67,7 @@ CREATE TABLE IF NOT EXISTS invitations (
     FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Room Messages Table (Private Watch Party Chat)
+-- Room Messages Table
 CREATE TABLE IF NOT EXISTS room_messages (
     id INT AUTO_INCREMENT PRIMARY KEY,
     room_code VARCHAR(50) NOT NULL,
@@ -143,3 +120,36 @@ CREATE TABLE IF NOT EXISTS favorites (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE
 );
+
+-- Private Rooms Table
+CREATE TABLE IF NOT EXISTS private_rooms (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    room_code VARCHAR(100) NOT NULL UNIQUE,
+    user_a INT NOT NULL,
+    user_b INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_a) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_b) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Private Messages Table
+CREATE TABLE IF NOT EXISTS private_messages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    room_code VARCHAR(100) NOT NULL,
+    user_id INT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Insert a Mock User for testing
+INSERT INTO users (username, email, password_hash)
+VALUES ('admin', 'admin@algotube.local', 'mock_hash_for_testing_only')
+ON DUPLICATE KEY UPDATE id=id;
+
+-- Insert a sample video for testing
+INSERT INTO videos (user_id, title, description, file_path, thumbnail_path, views, likes, dislikes)
+VALUES (1, 'Sample Video', 'This is a test video', '/uploads/videos/sample.mp4', '/uploads/thumbnails/default.jpg', 100, 5, 1)
+ON DUPLICATE KEY UPDATE id=id;
+
+SELECT 'Database setup complete!' AS status;

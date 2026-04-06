@@ -1,4 +1,3 @@
-
 export interface VideoMetadata {
   id: string;
   title: string;
@@ -16,31 +15,47 @@ export interface VideoMetadata {
  */
 function calculateTrendingWeight(video: VideoMetadata): number {
   const referenceTime = 1740480000000; // Stable reference: 2025-02-25
-  const hoursSinceUpload = (referenceTime - video.uploadedAt) / (1000 * 60 * 60);
+  const hoursSinceUpload =
+    (referenceTime - video.uploadedAt) / (1000 * 60 * 60);
   const normalizedHours = Math.max(0, hoursSinceUpload);
   return video.views / Math.pow(normalizedHours + 2, 1.5);
 }
 
 /**
  * Heapsort implementation to sort videos by trending weight in descending order.
+ * Optimized: Pre-calculates weights once to avoid O(n log n × c) redundant calculations.
+ * Now runs in O(n log n) with O(n) space for weight cache.
  */
 export function heapSortTrending(videos: VideoMetadata[]): VideoMetadata[] {
-  const arr = [...videos];
-  const n = arr.length;
-  if (n <= 1) return arr;
+  const n = videos.length;
+  if (n <= 1) return [...videos];
 
-  // Min-heap heapify function. 
-  // Sorting with a min-heap and swapping root to the end results in descending order.
+  // Pre-calculate all weights once - O(n)
+  const weightCache = new Map<string, number>();
+  for (const video of videos) {
+    weightCache.set(video.id, calculateTrendingWeight(video));
+  }
+
+  const arr = [...videos];
+
+  // Min-heap heapify function using cached weights - O(1) lookup
   const heapify = (size: number, i: number) => {
     let smallest = i;
     const left = 2 * i + 1;
     const right = 2 * i + 2;
 
-    if (left < size && calculateTrendingWeight(arr[left]) < calculateTrendingWeight(arr[smallest])) {
+    const weightLeft = weightCache.get(arr[left]?.id) ?? 0;
+    const weightRight = weightCache.get(arr[right]?.id) ?? 0;
+    const weightSmallest = weightCache.get(arr[smallest]?.id) ?? 0;
+
+    if (left < size && weightLeft < weightSmallest) {
       smallest = left;
     }
 
-    if (right < size && calculateTrendingWeight(arr[right]) < calculateTrendingWeight(arr[smallest])) {
+    if (
+      right < size &&
+      weightRight < (weightCache.get(arr[smallest]?.id) ?? 0)
+    ) {
       smallest = right;
     }
 
@@ -50,20 +65,16 @@ export function heapSortTrending(videos: VideoMetadata[]): VideoMetadata[] {
     }
   };
 
-  // Build min heap
+  // Build min heap - O(n)
   for (let i = Math.floor(n / 2) - 1; i >= 0; i--) {
     heapify(n, i);
   }
 
-  // Extract elements from heap one by one
+  // Extract elements from heap one by one - O(n log n)
   for (let i = n - 1; i > 0; i--) {
-    // Move current root (smallest weight in the current heap) to the end
     [arr[0], arr[i]] = [arr[i], arr[0]];
-
-    // Call min heapify on the reduced heap
     heapify(i, 0);
   }
 
-  // The array is now sorted descending (highest weight at start)
   return arr;
 }

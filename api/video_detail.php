@@ -4,6 +4,21 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
+// CORS Headers - Allow Next.js dev server
+if (!headers_sent()) {
+    header('Access-Control-Allow-Origin: http://localhost:9002');
+    header('Access-Control-Allow-Methods: GET, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type, Authorization, Accept');
+    header('Access-Control-Allow-Credentials: true');
+    header('Content-Type: application/json');
+}
+
+// Handle preflight
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
+    exit();
+}
+
 require_once dirname(__DIR__) . '/config/db.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -21,7 +36,7 @@ if (!$video_id) {
 try {
     // 1. Fetch Video + Author details (Payload Reduction: Exclude binary or internal paths)
     $vidSql = "
-        SELECT 
+        SELECT
             v.id, v.user_id, v.title, v.description, v.file_path, v.thumbnail_path, v.views, v.likes, v.dislikes, v.created_at,
             u.username AS author_name, u.avatar_url
         FROM videos v
@@ -40,7 +55,7 @@ try {
 
     // 2. Fetch associated comments
     $comSql = "
-        SELECT 
+        SELECT
             c.id, c.text, c.created_at,
             u.username AS comment_author, u.avatar_url AS comment_avatar
         FROM comments c

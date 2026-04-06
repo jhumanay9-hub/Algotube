@@ -4,17 +4,18 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-// Base CORS Headers
+// Base CORS Headers - Allow Next.js dev server
 if (!headers_sent()) {
     header('Access-Control-Allow-Origin: http://localhost:9002');
-    header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, Authorization');
+    header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type, Authorization, Accept');
+    header('Access-Control-Allow-Credentials: true');
     header('Content-Type: application/json');
 }
 
 // Preflight request resolution
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
+    http_response_code(204);
     exit();
 }
 
@@ -26,7 +27,7 @@ $charset = 'utf8mb4';
 
 $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
 $options = [
-    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION, // Fail loudly internally, but we catch it
+    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION, // Fail loudly, but we catch it
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     PDO::ATTR_EMULATE_PREPARES   => false,
 ];

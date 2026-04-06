@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { getLevenshteinDistance, generatePrefixes } from '@/lib/search-utils';
+import { useState, useEffect } from "react";
+import { getLevenshteinDistance, generatePrefixes } from "@/lib/search-utils";
 
 export interface SearchResult {
   video: any;
@@ -28,41 +28,55 @@ export function useSearch(query: string, allVideos: any[], debounceMs = 300) {
     setIsSearching(true);
     const handler = setTimeout(() => {
       const searchTerm = query.toLowerCase().trim();
-      
-      // 1. Prefix Matching
+
+      // 1. Prefix Matching - O(n) single pass
       // We check searchKeywords or generate them on the fly for mock/legacy data
-      const exactMatches = allVideos.filter(v => {
+      const exactMatchIds = new Set<string>();
+      const exactMatches: SearchResult[] = [];
+
+      for (const v of allVideos) {
         const keywords = v.searchKeywords || generatePrefixes(v.title || "");
-        return keywords.some((k: string) => k.startsWith(searchTerm) || searchTerm.startsWith(k));
-      });
+        const isMatch = keywords.some(
+          (k: string) => k.startsWith(searchTerm) || searchTerm.startsWith(k),
+        );
+        if (isMatch) {
+          exactMatchIds.add(v.id);
+          exactMatches.push({
+            video: v,
+            score: (v.views || v.viewsCount || 0) + 1000,
+            isFuzzy: false,
+          });
+        }
+      }
 
-      let finalResults: SearchResult[] = exactMatches.map(v => ({
-        video: v,
-        score: (v.views || v.viewsCount || 0) + 1000, // Significant boost for exact matches
-        isFuzzy: false
-      }));
+      let finalResults: SearchResult[] = exactMatches;
 
-      // 2. Fuzzy Matching (suggesting results for minor typos)
+      // 2. Fuzzy Matching (suggesting results for minor typos) - O(n) single pass
       if (finalResults.length < 5) {
-        const fuzzyResults = allVideos
-          .filter(v => !exactMatches.find(em => em.id === v.id))
-          .map(v => {
-            const distance = getLevenshteinDistance(searchTerm, (v.title || "").toLowerCase());
-            return { video: v, distance };
-          })
-          .filter(item => item.distance <= 2)
-          .map(item => ({
-            video: item.video,
-            score: (item.video.views || item.video.viewsCount || 0) * (1 / (item.distance + 1)),
-            isFuzzy: true
-          }));
-        
+        const fuzzyResults: SearchResult[] = [];
+
+        for (const v of allVideos) {
+          if (exactMatchIds.has(v.id)) continue; // O(1) lookup instead of .find()
+
+          const distance = getLevenshteinDistance(
+            searchTerm,
+            (v.title || "").toLowerCase(),
+          );
+          if (distance <= 2) {
+            fuzzyResults.push({
+              video: v,
+              score: (v.views || v.viewsCount || 0) * (1 / (distance + 1)),
+              isFuzzy: true,
+            });
+          }
+        }
+
         finalResults = [...finalResults, ...fuzzyResults];
       }
 
-      // 3. Rank by score (Engagement + Relevance)
+      // 3. Rank by score (Engagement + Relevance) - O(n log n) unavoidable for sorting
       finalResults.sort((a, b) => b.score - a.score);
-      
+
       setResults(finalResults.slice(0, 24));
       setIsSearching(false);
     }, debounceMs);

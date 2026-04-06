@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
+import { getApiUrl, getMediaUrl } from "@/lib/config";
 import { useParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import Sidebar from "@/components/layout/Sidebar";
@@ -8,6 +9,7 @@ import ConversationPanel from "@/components/layout/ConversationPanel";
 import CanvasVideoPlayer from "@/components/video-player/CanvasVideoPlayer";
 import VideoCard from "@/components/video-card/VideoCard";
 import { useUser } from "@/context/AuthContext";
+import { useSubscriptions } from "@/context/SubscriptionContext";
 import {
   ThumbsUp,
   ThumbsDown,
@@ -18,6 +20,8 @@ import {
   Users,
   DatabaseZap,
   Zap,
+  UserPlus,
+  UserCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -31,6 +35,8 @@ export default function VideoPageClient() {
   const { id } = useParams();
   const { user } = useUser();
   const { toast } = useToast();
+  const { isSubscribed, toggleSubscription, refreshSubscriptions } =
+    useSubscriptions();
   const playerRef = useRef<any>(null);
 
   const [video, setVideo] = useState<any>(null);
@@ -50,70 +56,151 @@ export default function VideoPageClient() {
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
+
+    // Type Safety: Validate id parameter before fetch
+    const vidStr = id?.toString();
+    if (!vidStr || vidStr === "undefined" || vidStr === "null") {
+      console.error("[VideoPageClient] Invalid video ID:", id);
+      toast({
+        variant: "destructive",
+        title: "Invalid Video ID",
+        description: "The video ID parameter is missing or invalid.",
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    console.log(`[VideoPageClient] Fetching video details for ID: ${vidStr}`);
+
     try {
-      const vidStr = id?.toString();
+      // URL Normalization: Use video_detail.php endpoint with proper URL construction
+      const videoDetailUrl = getApiUrl("video_detail.php", { id: vidStr });
+      console.log(`[VideoPageClient] Video Detail URL: ${videoDetailUrl}`);
 
-      const [vRes, lRes, dRes, fRes] = await Promise.all([
-        fetch(`/api/videos?limit=50`),
-        user
-          ? fetch(`/api/likes?userId=${user.uid}&videoId=${vidStr}`).then((r) =>
-              r.json(),
-            )
-          : Promise.resolve({ active: false }),
-        user
-          ? fetch(`/api/dislikes?userId=${user.uid}&videoId=${vidStr}`).then(
-              (r) => r.json(),
-            )
-          : Promise.resolve({ active: false }),
-        user
-          ? fetch(`/api/favorites?userId=${user.uid}&videoId=${vidStr}`).then(
-              (r) => r.json(),
-            )
-          : Promise.resolve({ active: false }),
-      ]);
+      // Fetch video details first
+      let vRes;
+      try {
+        vRes = await fetch(videoDetailUrl, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+          credentials: "omit",
+        });
+        console.log(`[VideoPageClient] Video response status: ${vRes.status}`);
+      } catch (fetchError) {
+        console.error("[VideoPageClient] Video fetch failed:", fetchError);
+        throw new Error(
+          `Failed to fetch video details: ${fetchError instanceof Error ? fetchError.message : "Unknown error"}`,
+        );
+      }
 
-      const vData = await vRes.json();
-      const vids = Array.isArray(vData) ? vData : [];
-      let found = vids.find((v: any) => v.id?.toString() === vidStr);
+      if (!vRes.ok) {
+        const errorData = await vRes.json().catch(() => null);
+        throw new Error(
+          `Video fetch failed with status ${vRes.status}: ${errorData?.error || errorData?.message || vRes.statusText}`,
+        );
+      }
 
-      if (found) {
+      const found = await vRes.json();
+      console.log("[VideoPageClient] Raw API Response:", found);
+
+      if (found && found.id) {
         // DATA SANITIZATION: Aggressively .trim() and validate the transmission URL
-        let videoUrl = (found.url || "").toString().trim();
+        let videoUrl = (found.url || found.file_path || "").toString().trim();
 
         const isInvalid =
           !videoUrl ||
           videoUrl === "undefined" ||
           videoUrl === "" ||
           videoUrl.includes("placeholder.com") ||
-          videoUrl.includes("picsum.photos") ||
-          (!videoUrl.toLowerCase().endsWith(".mp4") &&
-            !videoUrl.toLowerCase().endsWith(".mov") &&
-            !videoUrl.includes("googlevideo") &&
-            !videoUrl.includes("googleapis"));
+          videoUrl.includes("picsum.photos");
 
         if (isInvalid) {
+          console.warn("[VideoPageClient] Invalid video URL, using fallback");
           videoUrl = STABLE_FALLBACK_URL;
         }
         found.url = videoUrl;
       }
 
-      console.log("SQL Mesh Verified Data:", found);
+      console.log("[VideoPageClient] Processed Video Data:", found);
       setVideo(found || null);
-      setRecommendations(
-        vids.filter((v: any) => v.id?.toString() !== vidStr).slice(0, 3),
-      );
+      setRecommendations([]);
 
-      if (user) {
-        setIsLiked(lRes.active === true);
-        setIsDisliked(dRes.active === true);
-        setIsFavorited(fRes.active === true);
+      // Fetch engagement states separately to avoid cascading failures
+      if (user && user.uid) {
+        try {
+          console.log(
+            `[VideoPageClient] Fetching engagement states for user: ${user.uid}, video: ${vidStr}`,
+          );
+
+          const [lRes, dRes, fRes] = await Promise.all([
+            fetch(
+              getApiUrl("likes.php", { userId: user.uid, videoId: vidStr }),
+              { credentials: "omit" },
+            ).then((r) => {
+              if (!r.ok) throw new Error(`Likes HTTP ${r.status}`);
+              return r.json();
+            }),
+            fetch(
+              getApiUrl("dislikes.php", { userId: user.uid, videoId: vidStr }),
+              { credentials: "omit" },
+            ).then((r) => {
+              if (!r.ok) throw new Error(`Dislikes HTTP ${r.status}`);
+              return r.json();
+            }),
+            fetch(
+              getApiUrl("favorites.php", { userId: user.uid, videoId: vidStr }),
+              { credentials: "omit" },
+            ).then((r) => {
+              if (!r.ok) throw new Error(`Favorites HTTP ${r.status}`);
+              return r.json();
+            }),
+          ]);
+
+          console.log("[VideoPageClient] Engagement states:", {
+            liked: lRes.active,
+            disliked: dRes.active,
+            favorited: fRes.active,
+          });
+          setIsLiked(lRes.active === true);
+          setIsDisliked(dRes.active === true);
+          setIsFavorited(fRes.active === true);
+        } catch (engagementError) {
+          console.warn(
+            "[VideoPageClient] Failed to fetch engagement states (non-critical):",
+            engagementError,
+          );
+          // Don't fail the whole page load for engagement states
+        }
       }
     } catch (e: any) {
-      console.error("Mesh Sync Failed:", e.message || e);
+      // Error Handling: Log full error object to diagnose CORS vs 404 vs other issues
+      console.error("[VideoPageClient] Mesh Sync Failed - Full Error:", e);
+      console.error("[VideoPageClient] Error Details:", {
+        message: e.message,
+        name: e.name,
+        stack: e.stack,
+        type: e.type,
+        cause: e.cause,
+        isNetworkError:
+          e.message?.includes("fetch") || e.message?.includes("network"),
+        isCorsError: e.message?.includes("CORS") || e.message?.includes("cors"),
+        is404: e.message?.includes("404"),
+      });
+
+      toast({
+        variant: "destructive",
+        title: "Mesh Sync Failed",
+        description:
+          e.message || "Failed to load video data. Check console for details.",
+      });
+
+      setVideo(null);
     } finally {
       setIsLoading(false);
     }
-  }, [id, user]);
+  }, [id, user, toast]);
 
   useEffect(() => {
     loadData();
@@ -172,7 +259,7 @@ export default function VideoPageClient() {
     }
 
     try {
-      const res = await fetch(`/api/${type}`, {
+      const res = await fetch(getApiUrl(`${type}.php`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.uid, videoId: id }),
@@ -293,6 +380,46 @@ export default function VideoPageClient() {
                         AlgoTube Citizen
                       </p>
                     </div>
+                    {/* Dynamic Subscribe Button */}
+                    {user && user.uid !== video?.user_id?.toString() && (
+                      <Button
+                        onClick={async () => {
+                          const creatorId = video?.user_id;
+                          if (!creatorId) return;
+
+                          const newState = await toggleSubscription(creatorId);
+                          if (newState) {
+                            toast({
+                              title: "Subscribed!",
+                              description: `You're now following ${video?.author_name}`,
+                            });
+                          } else {
+                            toast({
+                              title: "Unsubscribed",
+                              description: `You've unfollowed ${video?.author_name}`,
+                            });
+                          }
+                        }}
+                        className={cn(
+                          "rounded-xl gap-2 h-9 px-4 transition-all duration-300 font-bold text-xs",
+                          isSubscribed(video?.user_id)
+                            ? "bg-accent/10 text-accent border border-accent/30 hover:bg-accent/20"
+                            : "bg-accent text-background hover:bg-accent/90",
+                        )}
+                      >
+                        {isSubscribed(video?.user_id) ? (
+                          <>
+                            <UserCheck size={14} />
+                            Subscribed
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus size={14} />
+                            Subscribe
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -395,12 +522,14 @@ export default function VideoPageClient() {
           </div>
 
           {showConversation && (
-            <div className="w-full xl:w-96 shrink-0 animate-in slide-in-from-right-4 duration-500">
-              <ConversationPanel
-                videoId={id?.toString() as string}
-                onSyncState={setExternalSyncState}
-                playerState={localPlayerState}
-              />
+            <div className="w-full xl:w-[450px] shrink-0 animate-in slide-in-from-right-4 duration-500">
+              <div className="sticky top-4 min-h-[600px] h-[calc(100vh-140px)]">
+                <ConversationPanel
+                  videoId={id?.toString() as string}
+                  onSyncState={setExternalSyncState}
+                  playerState={localPlayerState}
+                />
+              </div>
             </div>
           )}
         </main>

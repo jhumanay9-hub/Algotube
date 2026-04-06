@@ -1,13 +1,28 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "export",
-  // ADD THIS LINE: It creates physical folders for your routes
-  trailingSlash: true,
+  // Development mode - static export disabled
+  // output: "export",
+  // trailingSlash: true,
 
   images: {
-    unoptimized: true,
+    // Image optimization enabled for development
+    // unoptimized: true,
+    remotePatterns: [
+      {
+        protocol: "http",
+        hostname: "localhost",
+        pathname: "/Algotube/uploads/**",
+      },
+      {
+        protocol: "http",
+        hostname: "algotube.gt.tc",
+        pathname: "/uploads/**",
+      },
+    ],
   },
+
+  // Ignore build errors during development
   typescript: {
     ignoreBuildErrors: true,
   },
