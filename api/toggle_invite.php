@@ -1,0 +1,46 @@
+<?php
+// Handle the Preflight (OPTIONS) request FIRST
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    header("Access-Control-Allow-Origin: http://localhost:9002");
+    header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+    header("Access-Control-Allow-Headers: Content-Type, Authorization, Accept");
+    header("Access-Control-Allow-Credentials: true");
+    http_response_code(200);
+    exit();
+}
+
+// CORS Headers
+header("Access-Control-Allow-Origin: http://localhost:9002");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, Accept");
+header("Access-Control-Allow-Credentials: true");
+
+ob_start();
+header('Content-Type: application/json');
+require_once dirname(__DIR__) . '/config/db.php';
+
+$data = json_decode(file_get_contents('php://input'), true);
+$comment_id = $data['comment_id'] ?? null;
+$user_id = $data['user_id'] ?? null;
+$active = $data['active'] ?? 0;
+
+if (!$comment_id || !$user_id) {
+    ob_clean();
+    http_response_code(400);
+    echo json_encode(["status" => "error", "message" => "Missing comment_id or user_id"]);
+    exit;
+}
+
+try {
+    // Only the owner of the comment can toggle the invite
+    $stmt = $pdo->prepare("UPDATE comments SET invite_link_active = ? WHERE id = ? AND user_id = ?");
+    $stmt->execute([$active ? 1 : 0, $comment_id, $user_id]);
+
+    ob_clean();
+    echo json_encode(["status" => "success", "mesh_status" => $active ? "active" : "disabled"]);
+} catch (PDOException $e) {
+    ob_clean();
+    http_response_code(500);
+    echo json_encode(["status" => "error", "message" => "SQL Update Failed", "details" => $e->getMessage()]);
+}
+?>

@@ -1,0 +1,40 @@
+{
+  "placeholderImages": [
+    {
+      "id": "video-thumb-1",
+      "description": "Tech landscape with neon circuits",
+      "imageUrl": "https://picsum.photos/seed/tech1/600/400",
+      "imageHint": "cyber tech"
+    },
+    {
+      "id": "video-thumb-2",
+      "description": "Abstract coding background",
+      "imageUrl": "https://picsum.photos/seed/code2/600/400",
+      "imageHint": "coding matrix"
+    },
+    {
+      "id": "video-thumb-3",
+      "description": "Hacker workstation at night",
+      "imageUrl": "https://picsum.photos/seed/hack3/600/400",
+      "imageHint": "hacker desk"
+    },
+    {
+      "id": "video-thumb-4",
+      "description": "Cybersecurity lock concept",
+      "imageUrl": "https://picsum.photos/seed/secure4/600/400",
+      "imageHint": "cyber security"
+    },
+    {
+      "id": "video-thumb-5",
+      "description": "Futuristic city skyline",
+      "imageUrl": "https://picsum.photos/seed/city5/600/400",
+      "imageHint": "cyberpunk city"
+    },
+    {
+      "id": "user-avatar-1",
+      "description": "User profile avatar",
+      "imageUrl": "https://picsum.photos/seed/user1/100/100",
+      "imageHint": "person avatar"
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+
+{
+  "entities": {
+    "UserProfile": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "UserProfile",
+      "type": "object",
+      "description": "Represents a user's profile on the AlgoTube platform.",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "profilePictureUrl": { "type": "string", "format": "uri" },
+        "bio": { "type": "string" },
+        "interests": { "type": "array", "items": { "type": "string" } },
+        "joinedAt": { "type": "string", "format": "date-time" },
+        "subscriberCount": { "type": "number" },
+        "subscribedChannelIds": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "username", "email", "joinedAt"]
+    },
+    "Video": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Video",
+      "type": "object",
+      "description": "Represents a video uploaded to AlgoTube.",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "aiSummary": { "type": "string" },
+        "thumbnailUrl": { "type": "string", "format": "uri" },
+        "videoUrl": { "type": "string", "format": "uri" },
+        "uploadDate": { "type": "string", "format": "date-time" },
+        "viewsCount": { "type": "number" },
+        "uploaderId": { "type": "string" },
+        "likesCount": { "type": "number" },
+        "dislikesCount": { "type": "number" },
+        "commentsCount": { "type": "number" },
+        "shareCount": { "type": "number" },
+        "processingStatus": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "category": { "type": "string" },
+        "duration": { "type": "number" },
+        "aspectRatio": { "type": "string", "enum": ["16:9", "9:16"] },
+        "s3Key": { "type": "string" },
+        "s3Bucket": { "type": "string" }
+      },
+      "required": ["id", "title", "videoUrl", "uploadDate", "uploaderId", "processingStatus"]
+    },
+    "Comment": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Comment",
+      "type": "object",
+      "description": "A user's comment on a video.",
+      "properties": {
+        "id": { "type": "string" },
+        "videoId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userAvatar": { "type": "string", "format": "uri" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "likesCount": { "type": "number" }
+      },
+      "required": ["videoId", "userId", "content", "createdAt"]
+    }
+  },
+  "auth": {
+    "providers": ["password", "anonymous"]
+  },
+  "firestore": {
+    "/userProfiles/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile storage."
+    },
+    "/videos/{videoId}": {
+      "schema": "Video",
+      "description": "Public video storage."
+    },
+    "/videos/{videoId}/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Nested video comments."
+    }
+  }
+}
